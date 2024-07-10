@@ -5,7 +5,7 @@ const path = require('path');
 const multer = require('multer');
 const { Pinecone } = require('@pinecone-database/pinecone');
 const OpenAI = require('openai');
-
+const axios = require('axios');
 const ENV_FILE = path.join(__dirname, '..', '.env');
 config({ path: ENV_FILE });
 
@@ -51,7 +51,10 @@ function dynamicChunking(text, maxChunkSize, minOverlapSize) {
   }
 
   return chunks;
-}// POST endpoint to handle file upload and chunking
+}
+
+
+// POST endpoint to handle file upload and chunking
 app.post('/upsert', upload.array('file'), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
@@ -98,6 +101,79 @@ app.post('/upsert', upload.array('file'), async (req, res) => {
   }
 });
 
+// app.get('/list', async (req, res) => {
+//   try {
+//     const index = pc.index(process.env.PINECONE_INDEX_NAME);
+//     // Using a broad query to fetch all vectors
+//     const queryResponse = await index.query({
+//       vector: Array(3072).fill(0), // Adjust the vector size based on your index
+//       topK: 1000, // Number of items to retrieve, adjust as necessary
+//       includeMetadata: true,
+//       filter: {} // Fetch all items without a specific filter
+//     });
+
+//     const uniqueFilenames = new Set();
+//     queryResponse.matches.forEach(item => {
+//       if (item.metadata && item.metadata.filename) {
+//         uniqueFilenames.add(item.metadata.filename);
+//       }
+//     });
+
+//     const filenames = Array.from(uniqueFilenames).map(filename => ({
+//       filename,
+//       url: `http://localhost:5000/file-content?filename=${encodeURIComponent(filename)}`,
+//     }));
+
+//     res.json(filenames);
+//   } catch (error) {
+//     console.error('Error fetching list of files:', error);
+//     res.status(500).json({ error: 'Failed to fetch list of files' });
+//   }
+// });
+
+app.get('/list', async (req, res) => {
+  try {
+    const index = pc.index(process.env.PINECONE_INDEX_NAME);
+    
+    // Fetch all vector IDs using _listPaginated method
+    const pageSize = 4; // Adjust as necessary
+    let vectors = [];
+    let nextToken = null;
+    
+    do {
+      const fetchResponse = await index.listPaginated({}
+        // limit: pageSize,
+        // nextToken: nextToken,
+      );
+      
+      vectors = vectors.concat(fetchResponse.ids);
+      nextToken = fetchResponse.nextToken;
+      
+    } while (nextToken);
+    console.log(vectors);
+    // Extract unique filenames from vector IDs
+    const uniqueFilenames = new Set();
+    vectors.forEach(vectorId => {
+      const idParts = vectorId.split('_chunk_');
+      if (idParts.length > 0) {
+        uniqueFilenames.add(idParts[0]);
+      }
+    });
+    
+    // Create list of filenames with URLs
+    const filenames = Array.from(uniqueFilenames).map(filename => ({
+      filename,
+      url: `http://localhost:${PORT}/file-content?filename=${encodeURIComponent(filename)}`,
+    }));
+    
+    res.json(filenames);
+  } catch (error) {
+    console.error('Error fetching list of files:', error.message);
+    res.status(500).json({ error: 'Failed to fetch list of files' });
+  }
+});
+
+
 
 // Other endpoints for interacting with Pinecone
 app.get('/query', async (req, res) => {
@@ -133,16 +209,6 @@ app.delete('/delete', async (req, res) => {
   res.send('Vectors deleted.');
 });
 
-app.get('/list', async (req, res) => {
-  const { prefix, limit, paginationToken } = req.query;
-  const index = pc.index(process.env.PINECONE_INDEX_NAME);
-  const results = await index.list_paginated({
-    prefix,
-    limit: parseInt(limit, 10),
-    pagination_token: paginationToken,
-  });
-  res.json(results);
-});
 
 app.get('/stats', async (req, res) => {
   try {

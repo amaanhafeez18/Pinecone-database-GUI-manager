@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Button, TextField, Typography, Box, CircularProgress, Paper } from '@mui/material';
+import { Button, CircularProgress, Paper, Typography, Box } from '@mui/material';
 
-const Upload = () => {
+const Upload = ({ onUploadSuccess }) => {
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
 
   const handleFileChange = (e) => {
     const selectedFiles = Array.from(e.target.files);
-    console.log('Selected Files:', selectedFiles);
     setFiles(selectedFiles);
   };
 
@@ -32,8 +31,8 @@ const Upload = () => {
           'Content-Type': 'multipart/form-data'
         }
       });
-      console.log('Upload Response:', response.data);
       setUploadMessage('Files uploaded successfully.');
+      onUploadSuccess(); // Trigger refresh of file list
     } catch (error) {
       console.error('Error uploading files:', error);
       setUploadMessage('Failed to upload files. ' + error.message);
