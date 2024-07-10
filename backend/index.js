@@ -131,30 +131,16 @@ app.post('/upsert', upload.array('file'), async (req, res) => {
 //   }
 // });
 
-app.get('/list', async (req, res) => {
+
+app.get('/listfile', async (req, res) => {
   try {
-    const index = pc.index(process.env.PINECONE_INDEX_NAME);
-    
-    // Fetch all vector IDs using _listPaginated method
-    const pageSize = 4; // Adjust as necessary
-    let vectors = [];
-    let nextToken = null;
-    
-    do {
-      const fetchResponse = await index.listPaginated({}
-        // limit: pageSize,
-        // nextToken: nextToken,
-      );
-      
-      vectors = vectors.concat(fetchResponse.ids);
-      nextToken = fetchResponse.nextToken;
-      
-    } while (nextToken);
-    console.log(vectors);
-    // Extract unique filenames from vector IDs
+  // const { prefix, limit, paginationToken } = req.query;
+  const index = pc.index(process.env.PINECONE_INDEX_NAME);
+  const results = await index.listPaginated({  });
+      //  Extract unique filenames from vector IDs
     const uniqueFilenames = new Set();
-    vectors.forEach(vectorId => {
-      const idParts = vectorId.split('_chunk_');
+    results.vectors.forEach(vector => {
+      const idParts = vector.id.split('_chunk_');
       if (idParts.length > 0) {
         uniqueFilenames.add(idParts[0]);
       }
@@ -172,6 +158,50 @@ app.get('/list', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch list of files' });
   }
 });
+
+
+
+// app.get('/list', async (req, res) => {
+//   try {
+//     const index = pc.index(process.env.PINECONE_INDEX_NAME);
+    
+//     // Fetch all vector IDs using _listPaginated method
+//     const pageSize = 4; // Adjust as necessary
+//     let vectors = [];
+//     let nextToken = null;
+    
+//     do {
+//       const fetchResponse = await index.listPaginated({
+//         limit: pageSize,
+//         nextToken: nextToken,
+//     });
+      
+//       vectors = vectors.concat(fetchResponse.ids);
+//       nextToken = fetchResponse.nextToken;
+      
+//     } while (nextToken);
+//     console.log(vectors);
+//     // Extract unique filenames from vector IDs
+//     const uniqueFilenames = new Set();
+//     vectors.forEach(vectorId => {
+//       const idParts = vectorId.split('_chunk_');
+//       if (idParts.length > 0) {
+//         uniqueFilenames.add(idParts[0]);
+//       }
+//     });
+    
+    // Create list of filenames with URLs
+//     const filenames = Array.from(uniqueFilenames).map(filename => ({
+//       filename,
+//       url: `http://localhost:${PORT}/file-content?filename=${encodeURIComponent(filename)}`,
+//     }));
+    
+//     res.json(filenames);
+//   } catch (error) {
+//     console.error('Error fetching list of files:', error.message);
+//     res.status(500).json({ error: 'Failed to fetch list of files' });
+//   }
+// });
 
 
 

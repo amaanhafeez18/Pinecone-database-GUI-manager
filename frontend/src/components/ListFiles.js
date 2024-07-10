@@ -8,7 +8,7 @@ const ListFiles = ({ trigger }) => {
   useEffect(() => {
     const fetchFiles = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/list');
+        const response = await axios.get('http://localhost:5000/listfile');
         setFiles(response.data);
       } catch (error) {
         console.error('Error fetching file list:', error);
