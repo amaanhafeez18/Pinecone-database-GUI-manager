@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Button, TextField, Typography, Box, Paper } from '@mui/material';
+import { Button, TextField, Typography, Box, Paper, List, ListItem, ListItemText } from '@mui/material';
 
 const Query = () => {
   const [text, setText] = useState('');
@@ -13,7 +13,7 @@ const Query = () => {
       const response = await axios.get('http://localhost:5000/query', {
         params: { text, filter, topK },
       });
-      setResults(response.data);
+      setResults(response.data.matches);
     } catch (error) {
       console.error('Error querying vectors:', error);
     }
@@ -54,7 +54,25 @@ const Query = () => {
       <Typography variant="h6" sx={{ mt: 2 }}>
         Results
       </Typography>
-      <pre>{JSON.stringify(results, null, 2)}</pre>
+      <List>
+        {results.map((result, index) => (
+          <ListItem key={index} divider>
+            <ListItemText
+              primary={`ID: ${result.id}`}
+              secondary={
+                <Box>
+                  <Typography variant="body2">Score: {result.score}</Typography>
+                  <Typography variant="body2">Chunk Index: {result.metadata.chunkIndex}</Typography>
+                  <Typography variant="body2">Filename: {result.metadata.filename}</Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                    Chunk Content: {result.metadata.chunkContent}
+                  </Typography>
+                </Box>
+              }
+            />
+          </ListItem>
+        ))}
+      </List>
     </Paper>
   );
 };
