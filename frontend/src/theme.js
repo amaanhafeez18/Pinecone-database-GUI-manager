@@ -3,14 +3,14 @@ import { createTheme } from '@mui/material/styles';
 const theme = createTheme({
   palette: {
     primary: {
-      light: '##16181b',    // Light Cyan
+      light: '#1F2329',    // Light Cyan
       main: '#101214',     // Cyan
-      dark: '#008ba3',     // Dark Cyan
+      dark: '#009a5e',     // Dark Cyan
       contrastText: '#ffffff', // White
     },
     secondary: {
       light: '#ffcc80',    // Light Orange
-      main: '#29b6f6',     // Orange
+      main: '#009a5e',     // Orange
       dark: '#c66900',     // Dark Orange
       contrastText: '#000000', // Black
     },
