@@ -1,17 +1,23 @@
-// src/components/FileContent.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, TextField, Button, Typography, CircularProgress, Paper } from '@mui/material';
 import axios from 'axios';
 
-function FileContent() {
-  const [filename, setFilename] = useState('');
+function FileContent({ selectedFile }) {
+  const [filename, setFilename] = useState(selectedFile || '');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const fetchContent = async () => {
+  useEffect(() => {
+    if (selectedFile) {
+      setFilename(selectedFile);
+      fetchContent(selectedFile);
+    }
+  }, [selectedFile]);
+
+  const fetchContent = async (file) => {
     setLoading(true);
     try {
-      const response = await axios.get(`http://localhost:5000/file-content?filename=${encodeURIComponent(filename)}`);
+      const response = await axios.get(`http://localhost:5000/file-content?filename=${encodeURIComponent(file)}`);
       setContent(response.data);
     } catch (error) {
       console.error('Error fetching file content:', error);
@@ -31,8 +37,14 @@ function FileContent() {
         onChange={(e) => setFilename(e.target.value)}
         fullWidth
         sx={{ mb: 2 }}
+        disabled={Boolean(selectedFile)}
       />
-      <Button variant="contained" onClick={fetchContent} sx={{ mb: 2 }}>
+      <Button
+        variant="contained"
+        onClick={() => fetchContent(filename)}
+        sx={{ mb: 2 }}
+        disabled={Boolean(selectedFile)}
+      >
         Fetch Content
       </Button>
       {loading ? (

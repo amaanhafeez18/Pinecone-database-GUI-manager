@@ -7,8 +7,7 @@ import Delete from './components/Delete';
 import List from './components/List';
 import Stats from './components/Stats';
 import Login from './components/Login';
-import ListFiles from './components/ListFiles';
-import FileContent from './components/FileContent';
+import FileManager from './components/FileManager'; // Import FileManager
 import { ThemeProvider, CssBaseline, Container, Box, Button } from '@mui/material';
 import theme from './theme'; // Import your custom theme
 import logo from './assets/logo.png'; // Import your logo image
@@ -58,8 +57,7 @@ function App() {
               <Delete />
               <List />
               <Stats />
-              <ListFiles />
-              <FileContent />
+              <FileManager /> {/* Use FileManager here */}
             </>
           ) : (
             <Login onLogin={handleLogin} />

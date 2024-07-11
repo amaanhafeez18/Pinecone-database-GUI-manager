@@ -1,8 +1,17 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { List, ListItem, ListItemText, CircularProgress, Button, Typography, Paper } from '@mui/material';
+import {
+  List,
+  ListItem,
+  ListItemText,
+  CircularProgress,
+  Button,
+  Typography,
+  Paper,
+  Box,
+} from '@mui/material';
 
-function ListFiles() {
+function ListFiles({ onSelectFile }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -30,8 +39,25 @@ function ListFiles() {
       ) : (
         <List>
           {files.map((file) => (
-            <ListItem key={file.filename}>
-              <ListItemText primary={file.filename} />
+            <ListItem
+              key={file.filename}
+              button
+              onClick={() => onSelectFile(file.filename)}
+              sx={{
+                '&:hover': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.08)',
+                },
+              }}
+            >
+              <ListItemText
+                primary={file.filename}
+                sx={{
+                  cursor: 'pointer',
+                  '&:hover': {
+                    textDecoration: 'underline',
+                  },
+                }}
+              />
             </ListItem>
           ))}
         </List>
