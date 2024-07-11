@@ -134,15 +134,16 @@ app.delete('/delete', async (req, res) => {
 });
 
 app.get('/list', async (req, res) => {
-  const { prefix, limit, paginationToken } = req.query;
+  // const { prefix, limit, paginationToken } = req.query;
   const index = pc.index(process.env.PINECONE_INDEX_NAME);
-  const results = await index.list_paginated({
-    prefix,
-    limit: parseInt(limit, 10),
-    pagination_token: paginationToken,
-  });
+  const results = await index.listPaginated({  });
+  console.log(results);
+  // results =await index.listPaginated({  paginationToken: results.pagination.next});
   res.json(results);
 });
+
+
+
 
 app.get('/stats', async (req, res) => {
   try {
@@ -154,7 +155,77 @@ app.get('/stats', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch index stats' });
   }
 });
+app.get('/listfile', async (req, res) => {
+  console.log("please");
+  try {
+    console.log(" testing");
+  const index = pc.index(process.env.PINECONE_INDEX_NAME);
+  const results = await index.listPaginated({  });
+      //  Extract unique filenames from vector IDs
+    const uniqueFilenames = new Set();
+    results.vectors.forEach(vector => {
+      const idParts = vector.id.split('_chunk_');
+      if (idParts.length > 0) {
+        uniqueFilenames.add(idParts[0]);
+      }
+    });
+    
+    // Create list of filenames with URLs
+    const filenames = Array.from(uniqueFilenames).map(filename => ({
+      filename    }));
+    
+    res.json(filenames);
+  } catch (error) {
+    console.error('Error fetching list of files:', error.message);
+    res.status(500).json({ error: 'Failed to fetch list of files' });
+  }
+});
 
+async function fetchFileContent(filename) {
+  try {
+    const index = pc.index(process.env.PINECONE_INDEX_NAME);
+
+    console.log(`Fetching content for filename: ${filename}`);
+    const dummyVector = Array(3072).fill(0.0);
+    // Query to get all matching vectors
+    const queryResponse = await index.query({
+      vector: dummyVector, // Dummy vector since we're only using metadata filtering
+      filter: { filename: { $eq: filename } },
+      topK: 1000, // Maximum number of results to fetch
+      includeMetadata: true,
+    });
+
+    const chunks = queryResponse.matches.map(match => match.metadata.chunkContent);
+
+    console.log(`Chunks fetched: ${chunks.length}`);
+    if (chunks.length === 0) {
+      throw new Error('No chunks found for the specified filename.');
+    }
+
+    const fileContent = chunks.join('');
+    return fileContent;
+
+  } catch (error) {
+    console.error('Error fetching file content:', error);
+    throw new Error('Failed to fetch file content.');
+  }
+}
+
+app.get('/file-content', async (req, res) => {
+  try {
+    const filename = req.query.filename;
+    if (!filename) {
+      return res.status(400).send('Filename is required.');
+    }
+
+    const content = await fetchFileContent(filename);
+    console.log(content);
+    res.send(content);
+  } catch (error) {
+    console.error('Error fetching file content:', error);
+    res.status(500).send('Failed to fetch file content.');
+  }
+});
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
