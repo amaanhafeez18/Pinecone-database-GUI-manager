@@ -155,25 +155,41 @@ app.get('/stats', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch index stats' });
   }
 });
+
+
 app.get('/listfile', async (req, res) => {
   console.log("please");
   try {
-    console.log(" testing");
-  const index = pc.index(process.env.PINECONE_INDEX_NAME);
-  const results = await index.listPaginated({  });
-      //  Extract unique filenames from vector IDs
+    console.log("testing");
+    const index = pc.index(process.env.PINECONE_INDEX_NAME);
+    let results = await index.listPaginated({});
+    let allVectors = results.vectors;
+
+    // Fetch additional pages if pagination token exists
+    while (results.pagination && results.pagination.next) {
+      results = await index.listPaginated({ paginationToken: results.pagination.next });
+      allVectors = allVectors.concat(results.vectors);
+    }
+
+    console.log(allVectors);
+
+    // Extract unique filenames from vector IDs
     const uniqueFilenames = new Set();
-    results.vectors.forEach(vector => {
+    allVectors.forEach(vector => {
       const idParts = vector.id.split('_chunk_');
       if (idParts.length > 0) {
         uniqueFilenames.add(idParts[0]);
       }
     });
-    
-    // Create list of filenames with URLs
+
+    console.log(uniqueFilenames);
+
+    // Create list of filenames and sort them alphabetically
     const filenames = Array.from(uniqueFilenames).map(filename => ({
-      filename    }));
-    
+      filename
+    })).sort((a, b) => a.filename.localeCompare(b.filename));
+
+    console.log(filenames);
     res.json(filenames);
   } catch (error) {
     console.error('Error fetching list of files:', error.message);
@@ -195,14 +211,22 @@ async function fetchFileContent(filename) {
       includeMetadata: true,
     });
 
-    const chunks = queryResponse.matches.map(match => match.metadata.chunkContent);
+    // Extract chunks and their respective chunkIndex
+    const chunks = queryResponse.matches.map(match => ({
+      chunkContent: match.metadata.chunkContent,
+      chunkIndex: match.metadata.chunkIndex,
+    }));
 
     console.log(`Chunks fetched: ${chunks.length}`);
     if (chunks.length === 0) {
       throw new Error('No chunks found for the specified filename.');
     }
 
-    const fileContent = chunks.join('');
+    // Sort chunks by chunkIndex
+    chunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
+
+    // Join the sorted chunks into a single string
+    const fileContent = chunks.map(chunk => chunk.chunkContent).join('');
     return fileContent;
 
   } catch (error) {
@@ -226,6 +250,45 @@ app.get('/file-content', async (req, res) => {
     res.status(500).send('Failed to fetch file content.');
   }
 });
+
+
+// Delete file endpoint
+app.delete('/delete-file', async (req, res) => {
+  try {
+    const filename = req.query.filename;
+    if (!filename) {
+      return res.status(400).send('Filename is required.');
+    }
+
+    const index = pc.index(process.env.PINECONE_INDEX_NAME);
+
+    // Query to get all vectors related to the filename
+    const dummyVector = Array(3072).fill(0.0);
+    const queryResponse = await index.query({
+      vector: dummyVector,
+      filter: { filename: { $eq: filename } },
+      topK: 1000,
+      includeMetadata: true,
+    });
+
+    const vectorIds = queryResponse.matches.map(match => match.id);
+    console.log(vectorIds);
+    // Delete the vectors
+    await index.deleteMany(vectorIds);
+
+    console.log(`Deleted vectors for file: ${filename}`);
+    res.send(`Deleted vectors for file: ${filename}`);
+  } catch (error) {
+    console.error('Error deleting file and related chunks/vectors:', error.message);
+    res.status(500).send('Failed to delete file and related chunks/vectors.');
+  }
+});
+
+
+
+
+
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

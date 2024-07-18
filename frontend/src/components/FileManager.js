@@ -10,13 +10,18 @@ function FileManager() {
     setSelectedFile(filename);
   };
 
+  const handleFileUpdated = () => {
+    // Function to handle updates after a file is edited and re-uploaded
+    setSelectedFile('');
+  };
+
   return (
     <Container maxWidth="md">
       <Box sx={{ mb: 4 }}>
         <ListFiles onSelectFile={handleSelectFile} />
       </Box>
       <Box>
-        <FileContent selectedFile={selectedFile} />
+        <FileContent selectedFile={selectedFile} onFileUpdated={handleFileUpdated} />
       </Box>
     </Container>
   );

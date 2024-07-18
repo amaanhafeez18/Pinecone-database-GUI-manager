@@ -50,14 +50,15 @@ function App() {
         <Container sx={{ py: 4 }}>
           {isAuthenticated ? (
             <>
+            <FileManager />
               <Upload />
-              <Query />
+              {/* <Query />
               <Fetch />
               <Update />
               <Delete />
               <List />
-              <Stats />
-              <FileManager /> {/* Use FileManager here */}
+              <Stats /> */}
+               {/* Use FileManager here */}
             </>
           ) : (
             <Login onLogin={handleLogin} />
