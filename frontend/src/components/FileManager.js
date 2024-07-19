@@ -155,7 +155,7 @@ function FileManager() {
         <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <Typography variant="h4" sx={{ flexGrow: 1 }}>
-              View
+            {selectedFile}
             </Typography>
             <IconButton
               size="large"
