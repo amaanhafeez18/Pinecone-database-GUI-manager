@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
 import Upload from './components/Upload';
-
 import Login from './components/Login';
-import FileManager from './components/FileManager'; // Import FileManager
+import FileManager from './components/FileManager';
 import { ThemeProvider, CssBaseline, Container, Box, Button } from '@mui/material';
-import theme from './theme'; // Import your custom theme
-import logo from './assets/logo.png'; // Import your logo image
+import theme from './theme';
+import logo from './assets/logo.png';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
 
   const handleLogin = () => {
     setIsAuthenticated(true);
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('token');
     setIsAuthenticated(false);
   };
 
@@ -45,10 +45,8 @@ function App() {
         <Container sx={{ py: 4 }}>
           {isAuthenticated ? (
             <>
-            <FileManager />
+              <FileManager />
               <Upload />
-      
-               {/* Use FileManager here */}
             </>
           ) : (
             <Login onLogin={handleLogin} />

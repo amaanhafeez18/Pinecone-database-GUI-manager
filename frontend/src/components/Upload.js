@@ -6,8 +6,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import EditIcon from '@mui/icons-material/Edit';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'; // Import file icon
-
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 const Upload = () => {
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -15,27 +15,35 @@ const Upload = () => {
   const [fileContent, setFileContent] = useState('');
   const [editedContent, setEditedContent] = useState('');
   const [editMode, setEditMode] = useState(false);
-  const [expanded, setExpanded] = useState(false); // Initially collapsed
-  const [textRows, setTextRows] = useState(5); // Initial rows for the TextField
+  const [expanded, setExpanded] = useState(false);
+  const [textRows, setTextRows] = useState(5);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
-    console.log('Selected File:', selectedFile);
     setFiles([selectedFile]);
-    setExpanded(true); // Expand content when file is selected
+    setExpanded(true);
 
-    // Read the selected file's content
+    const fileType = selectedFile.type;
+
+    if (fileType === 'text/plain') {
+      processTextFile(selectedFile);
+    } else {
+      setUploadMessage('Only text files are allowed.');
+      setFiles([]);
+      setExpanded(false);
+    }
+  };
+
+  const processTextFile = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target.result;
       setFileContent(content);
-      setEditedContent(content); // Initialize editedContent with fileContent
-      
-      // Calculate number of lines based on 75% of file content length
+      setEditedContent(content);
       const contentLines = Math.ceil(content.split('\n').length * 0.75);
-      setTextRows(contentLines > 5 ? contentLines : 5); // Ensure at least 5 rows
+      setTextRows(contentLines > 5 ? contentLines : 5);
     };
-    reader.readAsText(selectedFile);
+    reader.readAsText(file);
   };
 
   const handleToggleExpand = () => {
@@ -58,8 +66,7 @@ const Upload = () => {
 
     setUploading(true);
 
-    // Determine content to upload
-    const contentToUpload = editedContent || fileContent; // Use edited content if available, otherwise original
+    const contentToUpload = editedContent || fileContent;
 
     const formData = new FormData();
     const blob = new Blob([contentToUpload], { type: 'text/plain' });
@@ -71,10 +78,8 @@ const Upload = () => {
           'Content-Type': 'multipart/form-data'
         }
       });
-      console.log('Upload Response:', response.data);
       setUploadMessage('Files uploaded successfully.');
     } catch (error) {
-      console.error('Error uploading files:', error);
       if (error.response && error.response.status === 409) {
         setUploadMessage(`Failed to upload files. ${error.response.data}`);
       } else {
@@ -101,6 +106,18 @@ const Upload = () => {
             {editMode ? <VisibilityIcon fontSize="large" /> : <EditIcon fontSize="large" />}
           </IconButton>
         </Tooltip>
+
+        <Tooltip title="Upload File">
+          <label htmlFor="file-upload">
+            <IconButton
+              component="span"
+              size="large"
+              sx={{  ml: 'auto'}}
+            >
+              <CloudUploadIcon fontSize="large" />
+            </IconButton>
+          </label>
+        </Tooltip>
         <Tooltip title={expanded ? 'Collapse' : 'Expand'}>
           <IconButton
             size="large"
@@ -110,20 +127,10 @@ const Upload = () => {
             {expanded ? <ExpandLessIcon fontSize="large" /> : <ExpandMoreIcon fontSize="large" />}
           </IconButton>
         </Tooltip>
-        <Tooltip title="Upload File">
-          <label htmlFor="file-upload">
-            <IconButton
-              component="span"
-              size="large"
-              sx={{ ml: 2 }}
-            >
-              <InsertDriveFileIcon fontSize="large" />
-            </IconButton>
-          </label>
-        </Tooltip>
         <input
           id="file-upload"
           type="file"
+          accept=".txt"
           onChange={handleFileChange}
           style={{ display: 'none' }}
         />
@@ -146,11 +153,10 @@ const Upload = () => {
               value={editedContent}
               onChange={(e) => {
                 setEditedContent(e.target.value);
-                // Calculate number of lines based on 75% of edited content length
                 const contentLines = Math.ceil(e.target.value.split('\n').length * 0.75);
-                setTextRows(contentLines > 5 ? contentLines : 5); // Ensure at least 5 rows
+                setTextRows(contentLines > 5 ? contentLines : 5);
               }}
-              sx={{ overflowY: 'auto' }} // Add scrollbar when content exceeds the height
+              sx={{ overflowY: 'auto' }}
             />
           ) : (
             <Box sx={{ mb: 2 }}>
@@ -163,7 +169,7 @@ const Upload = () => {
                 InputProps={{
                   readOnly: true,
                 }}
-                sx={{ overflowY: 'auto' }} // Add scrollbar when content exceeds the height
+                sx={{ overflowY: 'auto' }}
               />
             </Box>
           )}

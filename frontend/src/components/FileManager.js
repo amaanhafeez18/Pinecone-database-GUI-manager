@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, TextField, Button, Typography, CircularProgress, Paper, IconButton, Grid, Collapse, Card, CardContent, Tooltip, ListItemIcon } from '@mui/material';
+import {
+  Box, TextField, Button, Typography, CircularProgress, Paper, IconButton, Grid, Collapse, Card, CardContent, Tooltip, ListItemIcon
+} from '@mui/material';
 import axios from 'axios';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -22,15 +24,24 @@ function FileManager() {
   const [deleteId, setDeleteId] = useState(null);
 
   useEffect(() => {
+    fetchFiles(); // Fetch files when component mounts
+  }, []);
+
+  useEffect(() => {
     if (selectedFile) {
       fetchContent(selectedFile);
     }
   }, [selectedFile]);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
-      const response = await axios.get('http://localhost:5000/listfile');
+      const response = await axios.get('http://localhost:5000/listfile', { headers: getAuthHeaders() });
       setFiles(response.data);
     } catch (error) {
       console.error('Error fetching file list:', error);
@@ -41,7 +52,7 @@ function FileManager() {
   const fetchContent = async (file) => {
     setLoadingContent(true);
     try {
-      const response = await axios.get(`http://localhost:5000/file-content?filename=${encodeURIComponent(file)}`);
+      const response = await axios.get(`http://localhost:5000/file-content?filename=${encodeURIComponent(file)}`, { headers: getAuthHeaders() });
       setContent(response.data);
       setExpanded(true);
     } catch (error) {
@@ -71,6 +82,7 @@ function FileManager() {
     try {
       // Delete the file
       await axios.delete(`http://localhost:5000/delete-file`, {
+        headers: getAuthHeaders(),
         params: { filename: selectedFile }
       });
       // Re-upload the edited content
@@ -80,7 +92,8 @@ function FileManager() {
       formData.append('file', file);
       await axios.post('http://localhost:5000/upsert', formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
+          ...getAuthHeaders(),
         }
       });
       setEditable(false);
@@ -97,6 +110,7 @@ function FileManager() {
       setDeleteId(filename);
       try {
         const response = await axios.delete(`http://localhost:5000/delete-file`, {
+          headers: getAuthHeaders(),
           params: { filename }
         });
         if (response.status === 200) {
@@ -120,74 +134,72 @@ function FileManager() {
     <Box>
       <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
         <Typography variant="h4" gutterBottom>
-          File List
+          Polichat Database
         </Typography>
         <Button variant="contained" onClick={fetchFiles} sx={{ mb: 2 }}>
-          Fetch Files
+          Load Files
         </Button>
         {loadingFiles ? (
           <CircularProgress />
         ) : (
-<Grid container spacing={2}>
-  {files.map((file) => (
-    <Grid item key={file.filename} xs={12} sm={6} md={4}>
-      <Card
-        onClick={() => setSelectedFile(file.filename)}
-        sx={{
-          cursor: 'pointer',
-          backgroundColor: selectedFile === file.filename ? 'rgba(0, 0, 0, 0.04)' : 'inherit',
-        }}
-      >
-        <CardContent>
-          <Typography variant="body1">{file.filename}</Typography>
-          <ListItemIcon>
-            <DescriptionIcon />
-          </ListItemIcon>
-        </CardContent>
-      </Card>
-    </Grid>
-  ))}
-</Grid>
-
+          <Grid container spacing={2}>
+            {files.map((file) => (
+              <Grid item key={file.filename} xs={12} sm={6} md={4}>
+                <Card
+                  onClick={() => setSelectedFile(file.filename)}
+                  sx={{
+                    cursor: 'pointer',
+                    backgroundColor: selectedFile === file.filename ? 'rgba(0, 0, 0, 0.12)' : 'inherit',
+                  }}
+                >
+                  <CardContent>
+                    <Typography variant="body1">{file.filename}</Typography>
+                    <ListItemIcon>
+                      <DescriptionIcon />
+                    </ListItemIcon>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
         )}
       </Paper>
       {selectedFile && (
         <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <Typography variant="h4" sx={{ flexGrow: 1 }}>
-            {selectedFile}
+              {selectedFile}
             </Typography>
-            <IconButton
-              size="large"
-              onClick={editable ? handleView : handleEdit}
-              aria-expanded={expanded}
-              sx={{ ml: 'auto' }}
-            >
-              {editable ? <VisibilityIcon fontSize="large" /> : <EditIcon fontSize="large" />}
-            </IconButton>
-            <IconButton
-              size="large"
-              onClick={() => deleteFile(selectedFile)}
-              sx={{ color: red[500] }}
-            >
-              <DeleteIcon fontSize="large" />
-            </IconButton>
-            <IconButton
-              size="large"
-              onClick={handleToggleExpand}
-              aria-expanded={expanded}
-            >
-              {expanded ? <ExpandLessIcon fontSize="large" /> : <ExpandMoreIcon fontSize="large" />}
-            </IconButton>
+            <Tooltip title={editable ? 'View Mode' : 'Edit Mode'}>
+              <IconButton
+                size="large"
+                onClick={editable ? handleView : handleEdit}
+                aria-expanded={expanded}
+                sx={{ ml: 'auto' }}
+              >
+                {editable ? <VisibilityIcon fontSize="large" /> : <EditIcon fontSize="large" />}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete File">
+              <IconButton
+                size="large"
+                onClick={() => deleteFile(selectedFile)}
+                sx={{ color: red[500] }}
+              >
+                <DeleteIcon fontSize="large" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={expanded ? 'Collapse' : 'Expand'}>
+              <IconButton
+                size="large"
+                onClick={handleToggleExpand}
+                aria-expanded={expanded}
+              >
+                {expanded ? <ExpandLessIcon fontSize="large" /> : <ExpandMoreIcon fontSize="large" />}
+              </IconButton>
+            </Tooltip>
           </Box>
           <Collapse in={expanded} timeout="auto" unmountOnExit>
-            <TextField
-              label="Filename"
-              value={selectedFile}
-              fullWidth
-              sx={{ mb: 2 }}
-              disabled
-            />
             {loadingContent ? (
               <CircularProgress />
             ) : editable ? (
