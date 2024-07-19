@@ -51,7 +51,47 @@ function dynamicChunking(text, maxChunkSize, minOverlapSize) {
   }
 
   return chunks;
-}// POST endpoint to handle file upload and chunking
+}
+// Function to handle the core logic of listing files
+async function listFilesLogic() {
+  try {
+    const index = pc.index(process.env.PINECONE_INDEX_NAME);
+    let results = await index.listPaginated({});
+    let allVectors = results.vectors;
+
+    // Fetch additional pages if pagination token exists
+    while (results.pagination && results.pagination.next) {
+      results = await index.listPaginated({ paginationToken: results.pagination.next });
+      allVectors = allVectors.concat(results.vectors);
+    }
+
+    // Extract unique filenames from vector IDs
+    const uniqueFilenames = new Set();
+    allVectors.forEach(vector => {
+      const idParts = vector.id.split('_chunk_');
+      if (idParts.length > 0) {
+        uniqueFilenames.add(idParts[0]);
+      }
+    });
+
+    // Create list of filenames and sort them alphabetically
+    const filenames = Array.from(uniqueFilenames).map(filename => ({ filename })).sort((a, b) => a.filename.localeCompare(b.filename));
+
+    return filenames;
+  } catch (error) {
+    console.error('Error fetching list of files:', error.message);
+    throw new Error('Failed to fetch list of files');
+  }
+}
+app.get('/listfile', async (req, res) => {
+  try {
+    const filenames = await listFilesLogic();
+    res.json(filenames);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// Route handler for file upsert
 app.post('/upsert', upload.array('file'), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
@@ -60,10 +100,23 @@ app.post('/upsert', upload.array('file'), async (req, res) => {
 
     const files = req.files;
 
+    // Fetch list of filenames already in the database using listFilesLogic function
+    const existingFilenames = await listFilesLogic();
+
     // Process each uploaded file
     for (const file of files) {
       if (!file.buffer) {
         return res.status(400).send('Uploaded file has no buffer.');
+      }
+
+      // Remove the extension from the filename
+      const lastDotIndex = file.originalname.lastIndexOf('.');
+      const filenameWithoutExt = lastDotIndex !== -1 ? file.originalname.substring(0, lastDotIndex) : file.originalname;
+
+      // Check if filenameWithoutExt already exists in the database
+      const filenameExists = existingFilenames.some(item => item.filename === filenameWithoutExt);
+      if (filenameExists) {
+        return res.status(409).send(`File '${filenameWithoutExt}' already exists.`);
       }
 
       const text = file.buffer.toString();
@@ -77,17 +130,17 @@ app.post('/upsert', upload.array('file'), async (req, res) => {
         // Store chunk in Pinecone
         const index = pc.index(process.env.PINECONE_INDEX_NAME);
         const upsertData = {
-          id: `${file.originalname}_chunk_${i}`,
+          id: `${filenameWithoutExt}_chunk_${i}`,
           values: vector,  // Ensure vector is an array of numerical values
           metadata: { 
-            filename: file.originalname, 
+            filename: filenameWithoutExt, 
             chunkIndex: i,
             chunkContent: chunk  // Include chunk content in metadata
           },
         };
         await index.upsert([upsertData]);  // Pass data as an array
 
-        console.log(`Stored vector for file: ${file.originalname}, chunk: ${i}`);
+        console.log(`Stored vector for file: ${filenameWithoutExt}, chunk: ${i}`);
       }
     }
 
@@ -97,7 +150,6 @@ app.post('/upsert', upload.array('file'), async (req, res) => {
     res.status(500).send('Failed to process file upload.');
   }
 });
-
 
 // Other endpoints for interacting with Pinecone
 app.get('/query', async (req, res) => {
@@ -112,90 +164,50 @@ app.get('/query', async (req, res) => {
   res.json(queryResponse);
 });
 
-app.get('/fetch', async (req, res) => {
-  const { ids } = req.query;
-  const index = pc.index(process.env.PINECONE_INDEX_NAME);
-  const fetchResult = await index.fetch(JSON.parse(ids));
-  res.json(fetchResult);
-});
-
-app.post('/update', async (req, res) => {
-  const { id, values, metadata } = req.body;
-  const index = pc.index(process.env.PINECONE_INDEX_NAME);
-  await index.update({ id, values, metadata });
-  res.send('Vector updated.');
-});
-
-app.delete('/delete', async (req, res) => {
-  const { ids } = req.body;
-  const index = pc.index(process.env.PINECONE_INDEX_NAME);
-  await index.deleteMany(JSON.parse(ids));
-  res.send('Vectors deleted.');
-});
-
-app.get('/list', async (req, res) => {
-  // const { prefix, limit, paginationToken } = req.query;
-  const index = pc.index(process.env.PINECONE_INDEX_NAME);
-  const results = await index.listPaginated({  });
-  console.log(results);
-  // results =await index.listPaginated({  paginationToken: results.pagination.next});
-  res.json(results);
-});
 
 
 
 
-app.get('/stats', async (req, res) => {
-  try {
-    const index = pc.index(process.env.PINECONE_INDEX_NAME);
-    const stats = await index.describeIndexStats();
-    res.json(stats);
-  } catch (error) {
-    console.error('Error fetching index stats:', error);
-    res.status(500).json({ error: 'Failed to fetch index stats' });
-  }
-});
 
+// app.get('/listfile', async (req, res) => {
+//   console.log("please");
+//   try {
+//     console.log("testing");
+//     const index = pc.index(process.env.PINECONE_INDEX_NAME);
+//     let results = await index.listPaginated({});
+//     let allVectors = results.vectors;
 
-app.get('/listfile', async (req, res) => {
-  console.log("please");
-  try {
-    console.log("testing");
-    const index = pc.index(process.env.PINECONE_INDEX_NAME);
-    let results = await index.listPaginated({});
-    let allVectors = results.vectors;
+//     // Fetch additional pages if pagination token exists
+//     while (results.pagination && results.pagination.next) {
+//       results = await index.listPaginated({ paginationToken: results.pagination.next });
+//       allVectors = allVectors.concat(results.vectors);
+//     }
 
-    // Fetch additional pages if pagination token exists
-    while (results.pagination && results.pagination.next) {
-      results = await index.listPaginated({ paginationToken: results.pagination.next });
-      allVectors = allVectors.concat(results.vectors);
-    }
+//     console.log(allVectors);
 
-    console.log(allVectors);
+//     // Extract unique filenames from vector IDs
+//     const uniqueFilenames = new Set();
+//     allVectors.forEach(vector => {
+//       const idParts = vector.id.split('_chunk_');
+//       if (idParts.length > 0) {
+//         uniqueFilenames.add(idParts[0]);
+//       }
+//     });
 
-    // Extract unique filenames from vector IDs
-    const uniqueFilenames = new Set();
-    allVectors.forEach(vector => {
-      const idParts = vector.id.split('_chunk_');
-      if (idParts.length > 0) {
-        uniqueFilenames.add(idParts[0]);
-      }
-    });
+//     console.log(uniqueFilenames);
 
-    console.log(uniqueFilenames);
+//     // Create list of filenames and sort them alphabetically
+//     const filenames = Array.from(uniqueFilenames).map(filename => ({
+//       filename
+//     })).sort((a, b) => a.filename.localeCompare(b.filename));
 
-    // Create list of filenames and sort them alphabetically
-    const filenames = Array.from(uniqueFilenames).map(filename => ({
-      filename
-    })).sort((a, b) => a.filename.localeCompare(b.filename));
-
-    console.log(filenames);
-    res.json(filenames);
-  } catch (error) {
-    console.error('Error fetching list of files:', error.message);
-    res.status(500).json({ error: 'Failed to fetch list of files' });
-  }
-});
+//     console.log(filenames);
+//     res.json(filenames);
+//   } catch (error) {
+//     console.error('Error fetching list of files:', error.message);
+//     res.status(500).json({ error: 'Failed to fetch list of files' });
+//   }
+// });
 
 async function fetchFileContent(filename) {
   try {

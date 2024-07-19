@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
 import Upload from './components/Upload';
-import Query from './components/Query';
-import Fetch from './components/Fetch';
-import Update from './components/Update';
-import Delete from './components/Delete';
-import List from './components/List';
-import Stats from './components/Stats';
+
 import Login from './components/Login';
 import FileManager from './components/FileManager'; // Import FileManager
 import { ThemeProvider, CssBaseline, Container, Box, Button } from '@mui/material';
@@ -52,12 +47,7 @@ function App() {
             <>
             <FileManager />
               <Upload />
-              {/* <Query />
-              <Fetch />
-              <Update />
-              <Delete />
-              <List />
-              <Stats /> */}
+      
                {/* Use FileManager here */}
             </>
           ) : (
