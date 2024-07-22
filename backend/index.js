@@ -59,7 +59,7 @@ app.post('/login', async (req, res) => {
   if (!match) return res.status(401).send('Invalid credentials.');
 
   // Generate JWT
-  const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1m' });
+  const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1hr' });
   res.json({ token });
 });
 
@@ -135,6 +135,7 @@ app.get('/listfile', authenticateToken, async (req, res) => {
 
 app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) => {
   try {
+    console.log("hi");
     if (!req.files || req.files.length === 0) {
       return res.status(400).send('No files uploaded.');
     }
@@ -156,7 +157,7 @@ app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) =>
       }
 
       const text = file.buffer.toString();
-      const chunks = dynamicChunking(text, 2000, 300);
+      const chunks = dynamicChunking(text, 1000, 200);
 
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
@@ -207,12 +208,12 @@ async function fetchFileContent(filename) {
       topK: 1000,
       includeMetadata: true,
     });
-    console.log(queryResponse);
+  
     const chunks = queryResponse.matches.map(match => ({
       chunkContent: match.metadata.chunkContent,
       chunkIndex: match.metadata.chunkIndex,
     }));
-
+console.log(chunks);
     if (chunks.length === 0) {
       throw new Error('No chunks found for the specified filename.');
     }

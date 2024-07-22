@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Upload from './components/Upload';
 import Login from './components/Login';
 import FileManager from './components/FileManager';
@@ -7,7 +7,12 @@ import theme from './theme';
 import logo from './assets/logo.png';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    // Clear the token from localStorage on component mount
+    localStorage.removeItem('token');
+  }, []);
 
   const handleLogin = () => {
     setIsAuthenticated(true);

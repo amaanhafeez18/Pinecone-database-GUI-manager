@@ -6,8 +6,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import EditIcon from '@mui/icons-material/Edit';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+
 const Upload = () => {
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -17,11 +17,13 @@ const Upload = () => {
   const [editMode, setEditMode] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [textRows, setTextRows] = useState(5);
+  const [showMessage, setShowMessage] = useState(true); // New state for message visibility
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     setFiles([selectedFile]);
     setExpanded(true);
+    setShowMessage(true); // Ensure the message is shown when a file is selected
 
     const fileType = selectedFile.type;
 
@@ -30,7 +32,7 @@ const Upload = () => {
     } else {
       setUploadMessage('Only text files are allowed.');
       setFiles([]);
-      setExpanded(false);
+      setExpanded(false);  // Collapse if invalid file type
     }
   };
 
@@ -64,6 +66,11 @@ const Upload = () => {
       return;
     }
 
+    const getAuthHeaders = () => {
+      const token = localStorage.getItem('token');
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    };
+
     setUploading(true);
 
     const contentToUpload = editedContent || fileContent;
@@ -75,10 +82,12 @@ const Upload = () => {
     try {
       const response = await axios.post('http://localhost:5000/upsert', formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
+          ...getAuthHeaders()
         }
       });
       setUploadMessage('Files uploaded successfully.');
+      setExpanded(false);  // Collapse the view window after successful upload
     } catch (error) {
       if (error.response && error.response.status === 409) {
         setUploadMessage(`Failed to upload files. ${error.response.data}`);
@@ -87,7 +96,12 @@ const Upload = () => {
       }
     } finally {
       setUploading(false);
+      setShowMessage(true); // Ensure the message is visible after the upload process
     }
+  };
+
+  const getMessageColor = () => {
+    return uploadMessage.includes('successfully') ? 'green' : 'red';
   };
 
   return (
@@ -112,7 +126,7 @@ const Upload = () => {
             <IconButton
               component="span"
               size="large"
-              sx={{  ml: 'auto'}}
+              sx={{ ml: 'auto' }}
             >
               <CloudUploadIcon fontSize="large" />
             </IconButton>
@@ -177,9 +191,15 @@ const Upload = () => {
           <Button onClick={handleSaveAndUpload} variant="contained" color="primary" disabled={uploading}>
             {uploading ? <CircularProgress size={24} /> : 'Save and Upload'}
           </Button>
-          {uploadMessage && <Typography variant="body1" sx={{ mt: 2 }} color="secondary">{uploadMessage}</Typography>}
         </Box>
       </Collapse>
+
+      {/* Always visible message */}
+      {showMessage && (
+        <Typography variant="body1" sx={{ mt: 2, color: getMessageColor() }}>
+          {uploadMessage}
+        </Typography>
+      )}
     </Paper>
   );
 };
