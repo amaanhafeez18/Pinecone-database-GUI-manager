@@ -5,6 +5,8 @@ const path = require('path');
 const multer = require('multer');
 const { Pinecone } = require('@pinecone-database/pinecone');
 const OpenAI = require('openai');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 
 const ENV_FILE = path.join(__dirname, '..', '.env');
 config({ path: ENV_FILE });
@@ -17,11 +19,49 @@ const pc = new Pinecone({
 const openai = new OpenAI({
   key: process.env.OPENAI_KEY,
 });
+const JWT_SECRET = process.env.JWT_SECRET; // Ensure this is set in your .env file
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 const upload = multer({ storage: multer.memoryStorage() });
+
+// Middleware for JWT verification
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (token == null) return res.sendStatus(401);
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+};
+
+// Function to handle user authentication
+app.post('/login', async (req, res) => {
+  console.log("starting");
+  console.log(req.body);
+  const { username, password } = req.body;
+  console.log(username,password);
+  if (!username || !password) return res.status(400).send('Username and password required.');
+  const saltRounds = 10;
+
+  // Hashing the password
+  const hashedPassword = await bcrypt.hash( process.env.PASSWORD, saltRounds);
+  console.log(hashedPassword);
+  // Replace this with your actual user fetching logic
+  const user = { username:  process.env.USERNAME, password: hashedPassword }; // Example hashed password
+  
+  // Verify user
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) return res.status(401).send('Invalid credentials.');
+
+  // Generate JWT
+  const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1hr' });
+  res.json({ token });
+});
 
 async function extractVectorFromText(text) {
   const response = await openai.embeddings.create({
@@ -32,7 +72,7 @@ async function extractVectorFromText(text) {
 }
 
 function dynamicChunking(text, maxChunkSize, minOverlapSize) {
-  const sentences = text.match(/[^.?!\n]+[.?!\n]+/g) || [text]; // Split into sentences
+  const sentences = text.match(/[^.?!\n]+[.?!\n]+/g) || [text];
   const chunks = [];
   let currentChunk = '';
 
@@ -41,7 +81,7 @@ function dynamicChunking(text, maxChunkSize, minOverlapSize) {
       if (currentChunk.length > 0) {
         chunks.push(currentChunk.trim());
       }
-      currentChunk = currentChunk.slice(-minOverlapSize); // Retain the overlap from the previous chunk
+      currentChunk = currentChunk.slice(-minOverlapSize);
     }
     currentChunk += sentence + ' ';
   }
@@ -51,43 +91,91 @@ function dynamicChunking(text, maxChunkSize, minOverlapSize) {
   }
 
   return chunks;
-}// POST endpoint to handle file upload and chunking
-app.post('/upsert', upload.array('file'), async (req, res) => {
+}
+
+async function listFilesLogic() {
   try {
+    const index = pc.index(process.env.PINECONE_INDEX_NAME);
+    let results = await index.listPaginated({});
+    let 
+    
+    
+    allVectors = results.vectors;
+
+    while (results.pagination && results.pagination.next) {
+      results = await index.listPaginated({ paginationToken: results.pagination.next });
+      allVectors = allVectors.concat(results.vectors);
+    }
+
+    const uniqueFilenames = new Set();
+    allVectors.forEach(vector => {
+      const idParts = vector.id.split('_chunk_');
+      if (idParts.length > 0) {
+        uniqueFilenames.add(idParts[0]);
+      }
+    });
+
+    const filenames = Array.from(uniqueFilenames).map(filename => ({ filename })).sort((a, b) => a.filename.localeCompare(b.filename));
+
+    return filenames;
+  } catch (error) {
+    console.error('Error fetching list of files:', error.message);
+    throw new Error('Failed to fetch list of files');
+  }
+}
+
+app.get('/listfile', authenticateToken, async (req, res) => {
+  try {
+    const filenames = await listFilesLogic();
+    res.json(filenames);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) => {
+  try {
+    console.log("hi");
     if (!req.files || req.files.length === 0) {
       return res.status(400).send('No files uploaded.');
     }
 
     const files = req.files;
+    const existingFilenames = await listFilesLogic();
 
-    // Process each uploaded file
     for (const file of files) {
       if (!file.buffer) {
         return res.status(400).send('Uploaded file has no buffer.');
       }
 
-      const text = file.buffer.toString();
-      const chunks = dynamicChunking(text, 2000, 300); // Adjust max chunk size and min overlap size as needed
+      const lastDotIndex = file.originalname.lastIndexOf('.');
+      const filenameWithoutExt = lastDotIndex !== -1 ? file.originalname.substring(0, lastDotIndex) : file.originalname;
 
-      // Process each chunk
+      const filenameExists = existingFilenames.some(item => item.filename === filenameWithoutExt);
+      if (filenameExists) {
+        return res.status(409).send(`File '${filenameWithoutExt}' already exists.`);
+      }
+
+      const text = file.buffer.toString();
+      const chunks = dynamicChunking(text, 1000, 200);
+
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         const vector = await extractVectorFromText(chunk);
 
-        // Store chunk in Pinecone
         const index = pc.index(process.env.PINECONE_INDEX_NAME);
         const upsertData = {
-          id: `${file.originalname}_chunk_${i}`,
-          values: vector,  // Ensure vector is an array of numerical values
-          metadata: { 
-            filename: file.originalname, 
+          id: `${filenameWithoutExt}_chunk_${i}`,
+          values: vector,
+          metadata: {
+            filename: filenameWithoutExt,
             chunkIndex: i,
-            chunkContent: chunk  // Include chunk content in metadata
+            chunkContent: chunk
           },
         };
-        await index.upsert([upsertData]);  // Pass data as an array
+        await index.upsert([upsertData]);
 
-        console.log(`Stored vector for file: ${file.originalname}, chunk: ${i}`);
+        console.log(`Stored vector for file: ${filenameWithoutExt}, chunk: ${i}`);
       }
     }
 
@@ -98,9 +186,7 @@ app.post('/upsert', upload.array('file'), async (req, res) => {
   }
 });
 
-
-// Other endpoints for interacting with Pinecone
-app.get('/query', async (req, res) => {
+app.get('/query', authenticateToken, async (req, res) => {
   const { text, filter, topK } = req.query;
   const vector = await extractVectorFromText(text);
   const index = pc.index(process.env.PINECONE_INDEX_NAME);
@@ -112,120 +198,27 @@ app.get('/query', async (req, res) => {
   res.json(queryResponse);
 });
 
-app.get('/fetch', async (req, res) => {
-  const { ids } = req.query;
-  const index = pc.index(process.env.PINECONE_INDEX_NAME);
-  const fetchResult = await index.fetch(JSON.parse(ids));
-  res.json(fetchResult);
-});
-
-app.post('/update', async (req, res) => {
-  const { id, values, metadata } = req.body;
-  const index = pc.index(process.env.PINECONE_INDEX_NAME);
-  await index.update({ id, values, metadata });
-  res.send('Vector updated.');
-});
-
-app.delete('/delete', async (req, res) => {
-  const { ids } = req.body;
-  const index = pc.index(process.env.PINECONE_INDEX_NAME);
-  await index.deleteMany(JSON.parse(ids));
-  res.send('Vectors deleted.');
-});
-
-app.get('/list', async (req, res) => {
-  // const { prefix, limit, paginationToken } = req.query;
-  const index = pc.index(process.env.PINECONE_INDEX_NAME);
-  const results = await index.listPaginated({  });
-  console.log(results);
-  // results =await index.listPaginated({  paginationToken: results.pagination.next});
-  res.json(results);
-});
-
-
-
-
-app.get('/stats', async (req, res) => {
-  try {
-    const index = pc.index(process.env.PINECONE_INDEX_NAME);
-    const stats = await index.describeIndexStats();
-    res.json(stats);
-  } catch (error) {
-    console.error('Error fetching index stats:', error);
-    res.status(500).json({ error: 'Failed to fetch index stats' });
-  }
-});
-
-
-app.get('/listfile', async (req, res) => {
-  console.log("please");
-  try {
-    console.log("testing");
-    const index = pc.index(process.env.PINECONE_INDEX_NAME);
-    let results = await index.listPaginated({});
-    let allVectors = results.vectors;
-
-    // Fetch additional pages if pagination token exists
-    while (results.pagination && results.pagination.next) {
-      results = await index.listPaginated({ paginationToken: results.pagination.next });
-      allVectors = allVectors.concat(results.vectors);
-    }
-
-    console.log(allVectors);
-
-    // Extract unique filenames from vector IDs
-    const uniqueFilenames = new Set();
-    allVectors.forEach(vector => {
-      const idParts = vector.id.split('_chunk_');
-      if (idParts.length > 0) {
-        uniqueFilenames.add(idParts[0]);
-      }
-    });
-
-    console.log(uniqueFilenames);
-
-    // Create list of filenames and sort them alphabetically
-    const filenames = Array.from(uniqueFilenames).map(filename => ({
-      filename
-    })).sort((a, b) => a.filename.localeCompare(b.filename));
-
-    console.log(filenames);
-    res.json(filenames);
-  } catch (error) {
-    console.error('Error fetching list of files:', error.message);
-    res.status(500).json({ error: 'Failed to fetch list of files' });
-  }
-});
-
 async function fetchFileContent(filename) {
   try {
     const index = pc.index(process.env.PINECONE_INDEX_NAME);
-
-    console.log(`Fetching content for filename: ${filename}`);
     const dummyVector = Array(3072).fill(0.0);
-    // Query to get all matching vectors
     const queryResponse = await index.query({
-      vector: dummyVector, // Dummy vector since we're only using metadata filtering
+      vector: dummyVector,
       filter: { filename: { $eq: filename } },
-      topK: 1000, // Maximum number of results to fetch
+      topK: 1000,
       includeMetadata: true,
     });
-
-    // Extract chunks and their respective chunkIndex
+  
     const chunks = queryResponse.matches.map(match => ({
       chunkContent: match.metadata.chunkContent,
       chunkIndex: match.metadata.chunkIndex,
     }));
-
-    console.log(`Chunks fetched: ${chunks.length}`);
+console.log(chunks);
     if (chunks.length === 0) {
       throw new Error('No chunks found for the specified filename.');
     }
 
-    // Sort chunks by chunkIndex
     chunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
-
-    // Join the sorted chunks into a single string
     const fileContent = chunks.map(chunk => chunk.chunkContent).join('');
     return fileContent;
 
@@ -235,15 +228,15 @@ async function fetchFileContent(filename) {
   }
 }
 
-app.get('/file-content', async (req, res) => {
+app.get('/file-content', authenticateToken, async (req, res) => {
   try {
+    console.log("auth tok suc",req.query.filename);
     const filename = req.query.filename;
     if (!filename) {
       return res.status(400).send('Filename is required.');
     }
 
     const content = await fetchFileContent(filename);
-    console.log(content);
     res.send(content);
   } catch (error) {
     console.error('Error fetching file content:', error);
@@ -251,9 +244,7 @@ app.get('/file-content', async (req, res) => {
   }
 });
 
-
-// Delete file endpoint
-app.delete('/delete-file', async (req, res) => {
+app.delete('/delete-file', authenticateToken, async (req, res) => {
   try {
     const filename = req.query.filename;
     if (!filename) {
@@ -261,8 +252,6 @@ app.delete('/delete-file', async (req, res) => {
     }
 
     const index = pc.index(process.env.PINECONE_INDEX_NAME);
-
-    // Query to get all vectors related to the filename
     const dummyVector = Array(3072).fill(0.0);
     const queryResponse = await index.query({
       vector: dummyVector,
@@ -272,22 +261,14 @@ app.delete('/delete-file', async (req, res) => {
     });
 
     const vectorIds = queryResponse.matches.map(match => match.id);
-    console.log(vectorIds);
-    // Delete the vectors
     await index.deleteMany(vectorIds);
 
-    console.log(`Deleted vectors for file: ${filename}`);
     res.send(`Deleted vectors for file: ${filename}`);
   } catch (error) {
     console.error('Error deleting file and related chunks/vectors:', error.message);
     res.status(500).send('Failed to delete file and related chunks/vectors.');
   }
 });
-
-
-
-
-
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

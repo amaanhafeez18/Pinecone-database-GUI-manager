@@ -22,10 +22,17 @@ function FileContent({ selectedFile, onFileUpdated }) {
     }
   }, [selectedFile]);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchContent = async (file) => {
     setLoading(true);
     try {
-      const response = await axios.get(`http://localhost:5000/file-content?filename=${encodeURIComponent(file)}`);
+      const response = await axios.get(`http://localhost:5000/file-content?filename=${encodeURIComponent(file)}`, {
+        headers: getAuthHeaders()
+      });
       setContent(response.data);
       setExpanded(true);
     } catch (error) {
@@ -55,6 +62,7 @@ function FileContent({ selectedFile, onFileUpdated }) {
     try {
       // Delete the file
       await axios.delete(`http://localhost:5000/delete-file`, {
+        headers: getAuthHeaders(),
         params: { filename }
       });
 
@@ -66,7 +74,8 @@ function FileContent({ selectedFile, onFileUpdated }) {
 
       await axios.post('http://localhost:5000/upsert', formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
+          ...getAuthHeaders(),
         }
       });
 

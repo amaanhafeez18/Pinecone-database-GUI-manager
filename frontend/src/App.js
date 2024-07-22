@@ -1,25 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Upload from './components/Upload';
-import Query from './components/Query';
-import Fetch from './components/Fetch';
-import Update from './components/Update';
-import Delete from './components/Delete';
-import List from './components/List';
-import Stats from './components/Stats';
 import Login from './components/Login';
-import FileManager from './components/FileManager'; // Import FileManager
+import FileManager from './components/FileManager';
 import { ThemeProvider, CssBaseline, Container, Box, Button } from '@mui/material';
-import theme from './theme'; // Import your custom theme
-import logo from './assets/logo.png'; // Import your logo image
+import theme from './theme';
+import logo from './assets/logo.png';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    // Clear the token from localStorage on component mount
+    localStorage.removeItem('token');
+  }, []);
 
   const handleLogin = () => {
     setIsAuthenticated(true);
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('token');
     setIsAuthenticated(false);
   };
 
@@ -50,15 +50,8 @@ function App() {
         <Container sx={{ py: 4 }}>
           {isAuthenticated ? (
             <>
-            <FileManager />
+              <FileManager />
               <Upload />
-              {/* <Query />
-              <Fetch />
-              <Update />
-              <Delete />
-              <List />
-              <Stats /> */}
-               {/* Use FileManager here */}
             </>
           ) : (
             <Login onLogin={handleLogin} />
