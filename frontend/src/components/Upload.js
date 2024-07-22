@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Button, TextField, Typography, Box, CircularProgress, Paper, IconButton, Tooltip } from '@mui/material';
-import Collapse from '@mui/material/Collapse';
+import { Button, TextField, Typography, Box, CircularProgress, Paper, IconButton, Tooltip, Collapse } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import EditIcon from '@mui/icons-material/Edit';
@@ -17,13 +16,13 @@ const Upload = () => {
   const [editMode, setEditMode] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [textRows, setTextRows] = useState(5);
-  const [showMessage, setShowMessage] = useState(true); // New state for message visibility
+  const [showMessage, setShowMessage] = useState(true);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     setFiles([selectedFile]);
     setExpanded(true);
-    setShowMessage(true); // Ensure the message is shown when a file is selected
+    setShowMessage(true);
 
     const fileType = selectedFile.type;
 
@@ -32,7 +31,7 @@ const Upload = () => {
     } else {
       setUploadMessage('Only text files are allowed.');
       setFiles([]);
-      setExpanded(false);  // Collapse if invalid file type
+      setExpanded(false);
     }
   };
 
@@ -86,17 +85,17 @@ const Upload = () => {
           ...getAuthHeaders()
         }
       });
-      setUploadMessage('Files uploaded successfully.');
-      setExpanded(false);  // Collapse the view window after successful upload
+      setUploadMessage(`${files[0].name} uploaded successfully. Please click "Load Files" to refresh the list of files.`);
+      setExpanded(false);
     } catch (error) {
       if (error.response && error.response.status === 409) {
-        setUploadMessage(`Failed to upload files. ${error.response.data}`);
+        setUploadMessage(`Failed to upload ${files[0].name}. ${error.response.data}`);
       } else {
-        setUploadMessage('Failed to upload files. Please try again later.');
+        setUploadMessage(`Failed to upload ${files[0].name}. Please try again later.`);
       }
     } finally {
       setUploading(false);
-      setShowMessage(true); // Ensure the message is visible after the upload process
+      setShowMessage(true);
     }
   };
 
@@ -187,12 +186,14 @@ const Upload = () => {
               />
             </Box>
           )}
-
-          <Button onClick={handleSaveAndUpload} variant="contained" color="primary" disabled={uploading}>
-            {uploading ? <CircularProgress size={24} /> : 'Save and Upload'}
-          </Button>
         </Box>
       </Collapse>
+
+      <Box sx={{ mt: 2 }}>
+        <Button onClick={handleSaveAndUpload} variant="contained" color="primary" disabled={uploading}>
+          {uploading ? <CircularProgress size={24} /> : 'Save and Upload'}
+        </Button>
+      </Box>
 
       {/* Always visible message */}
       {showMessage && (

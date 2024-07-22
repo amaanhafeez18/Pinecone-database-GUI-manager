@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Box, TextField, Button, Typography, CircularProgress, Paper, IconButton, Grid, Collapse, Card, CardContent, Tooltip, ListItemIcon
+  Box, TextField, Button, Typography, CircularProgress, Paper, IconButton, Grid, Collapse, Card, CardContent, Tooltip, ListItemIcon, Alert
 } from '@mui/material';
 import axios from 'axios';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -22,6 +22,7 @@ function FileManager() {
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
+  const [deleteNotification, setDeleteNotification] = useState('');
 
   useEffect(() => {
     fetchFiles(); // Fetch files when component mounts
@@ -119,6 +120,7 @@ function FileManager() {
             setSelectedFile('');
             setContent('');
           }
+          setDeleteNotification(`File '${filename}' has been deleted.`);
         } else {
           console.error('Failed to delete file:', response.data);
         }
@@ -231,6 +233,15 @@ function FileManager() {
             )}
           </Collapse>
         </Paper>
+      )}
+      {deleteNotification && (
+        <Alert
+          severity="info"
+          sx={{ mb: 2, bgcolor: 'red', color: 'white' }}
+          onClose={() => setDeleteNotification('')}
+        >
+          {deleteNotification}
+        </Alert>
       )}
     </Box>
   );
