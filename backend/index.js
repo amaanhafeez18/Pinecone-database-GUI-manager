@@ -59,7 +59,7 @@ app.post('/login', async (req, res) => {
   if (!match) return res.status(401).send('Invalid credentials.');
 
   // Generate JWT
-  const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+  const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1m' });
   res.json({ token });
 });
 
@@ -97,7 +97,10 @@ async function listFilesLogic() {
   try {
     const index = pc.index(process.env.PINECONE_INDEX_NAME);
     let results = await index.listPaginated({});
-    let allVectors = results.vectors;
+    let 
+    
+    
+    allVectors = results.vectors;
 
     while (results.pagination && results.pagination.next) {
       results = await index.listPaginated({ paginationToken: results.pagination.next });
@@ -204,7 +207,7 @@ async function fetchFileContent(filename) {
       topK: 1000,
       includeMetadata: true,
     });
-
+    console.log(queryResponse);
     const chunks = queryResponse.matches.map(match => ({
       chunkContent: match.metadata.chunkContent,
       chunkIndex: match.metadata.chunkIndex,
@@ -226,6 +229,7 @@ async function fetchFileContent(filename) {
 
 app.get('/file-content', authenticateToken, async (req, res) => {
   try {
+    console.log("auth tok suc",req.query.filename);
     const filename = req.query.filename;
     if (!filename) {
       return res.status(400).send('Filename is required.');
