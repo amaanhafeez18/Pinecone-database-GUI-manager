@@ -3,30 +3,35 @@ const cors = require('cors');
 const { config } = require('dotenv');
 const path = require('path');
 const multer = require('multer');
-const { Pinecone } = require('@pinecone-database/pinecone');
+const weaviate = require('weaviate-client');
 const OpenAI = require('openai');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-
+// Dynamic import of node-fetch
+async function init() {
+  const { default: fetch } = await import('node-fetch');
+  globalThis.fetch = fetch;
+}
 const ENV_FILE = path.join(__dirname, '..', '.env');
 config({ path: ENV_FILE });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const pc = new Pinecone({
-  apiKey: process.env.PINECONE_API_KEY,
+
+const client = weaviate.weaviateV2.client({
+  scheme: 'http',
+  host: 'localhost:8080'
 });
 const openai = new OpenAI({
   key: process.env.OPENAI_KEY,
 });
-const JWT_SECRET = process.env.JWT_SECRET; // Ensure this is set in your .env file
+const JWT_SECRET = process.env.JWT_SECRET;
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Middleware for JWT verification
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -39,26 +44,17 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Function to handle user authentication
 app.post('/login', async (req, res) => {
-  console.log("starting");
-  console.log(req.body);
   const { username, password } = req.body;
-  console.log(username,password);
   if (!username || !password) return res.status(400).send('Username and password required.');
   const saltRounds = 10;
 
-  // Hashing the password
-  const hashedPassword = await bcrypt.hash( process.env.PASSWORD, saltRounds);
-  console.log(hashedPassword);
-  // Replace this with your actual user fetching logic
-  const user = { username:  process.env.USERNAME, password: hashedPassword }; // Example hashed password
-  
-  // Verify user
+  const hashedPassword = await bcrypt.hash(password, saltRounds);
+  const user = { username, password: hashedPassword };
+
   const match = await bcrypt.compare(password, user.password);
   if (!match) return res.status(401).send('Invalid credentials.');
 
-  // Generate JWT
   const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1hr' });
   res.json({ token });
 });
@@ -93,40 +89,56 @@ function dynamicChunking(text, maxChunkSize, minOverlapSize) {
   return chunks;
 }
 
-async function listFilesLogic() {
-  try {
-    const index = pc.index(process.env.PINECONE_INDEX_NAME);
-    let results = await index.listPaginated({});
-    let 
-    
-    
-    allVectors = results.vectors;
+async function getBatchWithCursor(collectionName, batchSize, cursor) {
+  const query = client.graphql.get()
+    .withClassName(collectionName)
+    .withFields('chunk_id _additional { id }') // Adjust fields based on your schema
+    .withLimit(batchSize);
 
-    while (results.pagination && results.pagination.next) {
-      results = await index.listPaginated({ paginationToken: results.pagination.next });
-      allVectors = allVectors.concat(results.vectors);
-    }
-
-    const uniqueFilenames = new Set();
-    allVectors.forEach(vector => {
-      const idParts = vector.id.split('_chunk_');
-      if (idParts.length > 0) {
-        uniqueFilenames.add(idParts[0]);
-      }
-    });
-
-    const filenames = Array.from(uniqueFilenames).map(filename => ({ filename })).sort((a, b) => a.filename.localeCompare(b.filename));
-
-    return filenames;
-  } catch (error) {
-    console.error('Error fetching list of files:', error.message);
-    throw new Error('Failed to fetch list of files');
+  if (cursor) {
+    // Fetch the next set of results using the cursor
+    const result = await query.withAfter(cursor).do();
+    return result.data.Get[collectionName];
+  } else {
+    // Fetch the first set of results
+    const result = await query.do();
+    return result.data.Get[collectionName];
   }
 }
 
+async function listFilesLogic(collectionName, batchSize = 600) {
+  let cursor = null;
+  const filenames = new Set(); // Use Set to ensure uniqueness
+
+  while (true) {
+    let nextBatch = await getBatchWithCursor(collectionName, batchSize, cursor);
+
+    if (nextBatch.length === 0) break;
+
+    // Extract filenames from chunk_ids and add to Set
+    nextBatch.forEach(obj => {
+      if (obj.chunk_id) {
+        const parts = obj.chunk_id.split('_');
+        if (parts.length > 1) {
+          const filename = parts.slice(0, -2).join('_'); // Join all parts except the last two
+          filenames.add(filename);
+        }
+      }
+    });
+    console.log(filenames);
+
+    cursor = nextBatch.at(-1)['_additional']['id'];
+  }
+
+  return Array.from(filenames).sort((a, b) => a.localeCompare(b));
+
+}
+
+
 app.get('/listfile', authenticateToken, async (req, res) => {
   try {
-    const filenames = await listFilesLogic();
+    const filenames = await listFilesLogic('TextChunk');
+    console.log(filenames);
     res.json(filenames);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -135,23 +147,25 @@ app.get('/listfile', authenticateToken, async (req, res) => {
 
 app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) => {
   try {
-    console.log("hi");
     if (!req.files || req.files.length === 0) {
       return res.status(400).send('No files uploaded.');
     }
 
     const files = req.files;
-    const existingFilenames = await listFilesLogic();
+
+    // Fetch existing filenames
+    const existingFilenames = await listFilesLogic('TextChunk');
 
     for (const file of files) {
       if (!file.buffer) {
         return res.status(400).send('Uploaded file has no buffer.');
       }
 
-      const lastDotIndex = file.originalname.lastIndexOf('.');
-      const filenameWithoutExt = lastDotIndex !== -1 ? file.originalname.substring(0, lastDotIndex) : file.originalname;
+      // Extract filename without extension
+      const filenameWithoutExt = path.basename(file.originalname, path.extname(file.originalname));
 
-      const filenameExists = existingFilenames.some(item => item.filename === filenameWithoutExt);
+      // Check for duplicate filenames
+      const filenameExists = existingFilenames.includes(filenameWithoutExt);
       if (filenameExists) {
         return res.status(409).send(`File '${filenameWithoutExt}' already exists.`);
       }
@@ -163,17 +177,14 @@ app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) =>
         const chunk = chunks[i];
         const vector = await extractVectorFromText(chunk);
 
-        const index = pc.index(process.env.PINECONE_INDEX_NAME);
-        const upsertData = {
-          id: `${filenameWithoutExt}_chunk_${i}`,
-          values: vector,
-          metadata: {
-            filename: filenameWithoutExt,
-            chunkIndex: i,
-            chunkContent: chunk
-          },
-        };
-        await index.upsert([upsertData]);
+        await client.data.creator()
+          .withClassName('TextChunk')
+          .withProperties({
+            chunk_id: `${filenameWithoutExt}_chunk_${i}`,
+            vector: vector,
+            content: chunk
+          })
+          .do();
 
         console.log(`Stored vector for file: ${filenameWithoutExt}, chunk: ${i}`);
       }
@@ -185,64 +196,75 @@ app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) =>
     res.status(500).send('Failed to process file upload.');
   }
 });
-
 app.get('/query', authenticateToken, async (req, res) => {
-  const { text, filter, topK } = req.query;
+  const { text, topK } = req.query;
   const vector = await extractVectorFromText(text);
-  const index = pc.index(process.env.PINECONE_INDEX_NAME);
-  const queryResponse = await index.query({
-    vector,
-    topK: parseInt(topK, 10),
-    includeMetadata: true,
-  });
-  res.json(queryResponse);
+
+  const response = await client.graphql.get()
+    .withClassName('TextChunk')
+    .withNearVector({ vector, certainty: 0.7 })
+    .withLimit(parseInt(topK, 10))
+    .do();
+
+  res.json(response);
 });
 
-async function fetchFileContent(filename) {
-  try {
-    const index = pc.index(process.env.PINECONE_INDEX_NAME);
-    const dummyVector = Array(3072).fill(0.0);
-    const queryResponse = await index.query({
-      vector: dummyVector,
-      filter: { filename: { $eq: filename } },
-      topK: 1000,
-      includeMetadata: true,
-    });
-  
-    const chunks = queryResponse.matches.map(match => ({
-      chunkContent: match.metadata.chunkContent,
-      chunkIndex: match.metadata.chunkIndex,
-    }));
-console.log(chunks);
-    if (chunks.length === 0) {
-      throw new Error('No chunks found for the specified filename.');
-    }
-
-    chunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
-    const fileContent = chunks.map(chunk => chunk.chunkContent).join('');
-    return fileContent;
-
-  } catch (error) {
-    console.error('Error fetching file content:', error);
-    throw new Error('Failed to fetch file content.');
-  }
-}
 
 app.get('/file-content', authenticateToken, async (req, res) => {
   try {
-    console.log("auth tok suc",req.query.filename);
     const filename = req.query.filename;
     if (!filename) {
       return res.status(400).send('Filename is required.');
     }
 
-    const content = await fetchFileContent(filename);
-    res.send(content);
+    // Helper function to get a batch of objects
+    async function getBatchWithCursor(collectionName, batchSize, cursor) {
+      const query = client.graphql.get()
+        .withClassName(collectionName)
+        .withFields('chunk_id content _additional { id }')
+        .withLimit(batchSize);
+
+      if (cursor) {
+        let result = await query.withAfter(cursor).do();
+        return result.data.Get[collectionName];
+      } else {
+        let result = await query.do();
+        return result.data.Get[collectionName];
+      }
+    }
+
+    // Fetch all chunks for the given file
+    let cursor = null;
+    const allChunks = [];
+    while (true) {
+      const batch = await getBatchWithCursor('TextChunk', 100, cursor);
+      
+      if (batch.length === 0) break;
+      
+      const filteredChunks = batch.filter(chunk => chunk.chunk_id.startsWith(`${filename}_chunk_`));
+      allChunks.push(...filteredChunks);
+      
+      // Move the cursor to the last returned uuid
+      cursor = batch.at(-1)['_additional']['id'];
+    }
+
+    // Sort chunks by their index in ascending order
+    allChunks.sort((a, b) => {
+      const indexA = parseInt(a.chunk_id.split('_chunk_').pop(), 10);
+      const indexB = parseInt(b.chunk_id.split('_chunk_').pop(), 10);
+      return indexA - indexB;
+    });
+
+    // Extract content and send as response
+    const fileContent = allChunks.map(chunk => chunk.content).join('');
+    res.send(fileContent);
+    
   } catch (error) {
     console.error('Error fetching file content:', error);
     res.status(500).send('Failed to fetch file content.');
   }
 });
+
 
 app.delete('/delete-file', authenticateToken, async (req, res) => {
   try {
@@ -251,17 +273,45 @@ app.delete('/delete-file', authenticateToken, async (req, res) => {
       return res.status(400).send('Filename is required.');
     }
 
-    const index = pc.index(process.env.PINECONE_INDEX_NAME);
-    const dummyVector = Array(3072).fill(0.0);
-    const queryResponse = await index.query({
-      vector: dummyVector,
-      filter: { filename: { $eq: filename } },
-      topK: 1000,
-      includeMetadata: true,
-    });
+    // Helper function to get a batch of objects
+    async function getBatchWithCursor(collectionName, batchSize, cursor) {
+      const query = client.graphql.get()
+        .withClassName(collectionName)
+        .withFields('chunk_id _additional { id }')
+        .withLimit(batchSize);
 
-    const vectorIds = queryResponse.matches.map(match => match.id);
-    await index.deleteMany(vectorIds);
+      if (cursor) {
+        let result = await query.withAfter(cursor).do();
+        return result.data.Get[collectionName];
+      } else {
+        let result = await query.do();
+        return result.data.Get[collectionName];
+      }
+    }
+
+    // Fetch all chunks for the given file
+    let cursor = null;
+    const allChunks = [];
+    while (true) {
+      const batch = await getBatchWithCursor('TextChunk', 100, cursor);
+
+      if (batch.length === 0) break;
+
+      const filteredChunks = batch.filter(chunk => chunk.chunk_id.startsWith(`${filename}_chunk_`));
+      allChunks.push(...filteredChunks);
+
+      // Move the cursor to the last returned uuid
+      cursor = batch.at(-1)['_additional']['id'];
+    }
+
+    // Extract IDs and delete each chunk
+    const ids = allChunks.map(chunk => chunk._additional.id);
+    for (const id of ids) {
+      await client.data.deleter()
+        .withClassName('TextChunk')
+        .withId(id)
+        .do();
+    }
 
     res.send(`Deleted vectors for file: ${filename}`);
   } catch (error) {
@@ -270,6 +320,14 @@ app.delete('/delete-file', authenticateToken, async (req, res) => {
   }
 });
 
+
+
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+});
+
+
+init().catch(err => {
+  console.error('Failed to initialize:', err);
 });

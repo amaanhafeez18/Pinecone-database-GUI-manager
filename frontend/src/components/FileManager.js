@@ -43,7 +43,8 @@ function FileManager() {
     setLoadingFiles(true);
     try {
       const response = await axios.get('http://localhost:5000/listfile', { headers: getAuthHeaders() });
-      setFiles(response.data);
+      // Assuming response.data is an array of file names
+      setFiles(response.data.map(filename => ({ filename })));
     } catch (error) {
       console.error('Error fetching file list:', error);
     }
@@ -79,10 +80,15 @@ function FileManager() {
   };
 
   const handleSaveAndUpload = async () => {
+    if (!selectedFile) {
+      console.error('No file selected for editing.');
+      return;
+    }
+
     setUploading(true);
     try {
       // Delete the file
-      await axios.delete(`http://localhost:5000/delete-file`, {
+      await axios.delete('http://localhost:5000/delete-file', {
         headers: getAuthHeaders(),
         params: { filename: selectedFile }
       });
@@ -99,6 +105,7 @@ function FileManager() {
       });
       setEditable(false);
       fetchFiles(); // Refresh the file list
+      fetchContent(selectedFile); // Re-fetch content to ensure latest content is loaded
     } catch (error) {
       console.error('Error saving and uploading file:', error);
     }
@@ -110,7 +117,7 @@ function FileManager() {
       setDeleting(true);
       setDeleteId(filename);
       try {
-        const response = await axios.delete(`http://localhost:5000/delete-file`, {
+        const response = await axios.delete('http://localhost:5000/delete-file', {
           headers: getAuthHeaders(),
           params: { filename }
         });
@@ -155,7 +162,7 @@ function FileManager() {
                   }}
                 >
                   <CardContent>
-                    <Typography variant="body1">{file.filename}</Typography>
+                    <Typography variant="body1" noWrap>{file.filename}</Typography>
                     <ListItemIcon>
                       <DescriptionIcon />
                     </ListItemIcon>
@@ -212,9 +219,10 @@ function FileManager() {
                 fullWidth
                 rows={10}
                 variant="outlined"
+                sx={{ overflowWrap: 'break-word', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}
               />
             ) : (
-              <Typography variant="body1" component="div" sx={{ whiteSpace: 'pre-wrap', mb: 2 }}>
+              <Typography variant="body1" component="div" sx={{ overflowWrap: 'break-word', wordWrap: 'break-word', whiteSpace: 'pre-wrap', mb: 2 }}>
                 {content}
               </Typography>
             )}
