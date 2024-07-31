@@ -8,11 +8,12 @@ const OpenAI = require('openai');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
-const ENV_FILE = path.join(__dirname, '..', '.env');
+const ENV_FILE = '.env';
 config({ path: ENV_FILE });
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 2536;
+console.log(process.env.PINECONE_API_KEY);
 const pc = new Pinecone({
   apiKey: process.env.PINECONE_API_KEY,
 });
@@ -44,16 +45,16 @@ app.post('/login', async (req, res) => {
   console.log("starting");
   console.log(req.body);
   const { username, password } = req.body;
-  console.log(username,password);
+  console.log(username, password);
   if (!username || !password) return res.status(400).send('Username and password required.');
   const saltRounds = 10;
 
   // Hashing the password
-  const hashedPassword = await bcrypt.hash( process.env.PASSWORD, saltRounds);
+  const hashedPassword = await bcrypt.hash(process.env.PASSWORD, saltRounds);
   console.log(hashedPassword);
   // Replace this with your actual user fetching logic
-  const user = { username:  process.env.USERNAME, password: hashedPassword }; // Example hashed password
-  
+  const user = { username: process.env.USERNAME, password: hashedPassword }; // Example hashed password
+
   // Verify user
   const match = await bcrypt.compare(password, user.password);
   if (!match) return res.status(401).send('Invalid credentials.');
@@ -97,10 +98,10 @@ async function listFilesLogic() {
   try {
     const index = pc.index(process.env.PINECONE_INDEX_NAME);
     let results = await index.listPaginated({});
-    let 
-    
-    
-    allVectors = results.vectors;
+    let
+
+
+      allVectors = results.vectors;
 
     while (results.pagination && results.pagination.next) {
       results = await index.listPaginated({ paginationToken: results.pagination.next });
@@ -131,6 +132,10 @@ app.get('/listfile', authenticateToken, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+app.get('/get', async (req, res) => {
+  res.send("This is test backend get method");
 });
 
 app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) => {
@@ -208,12 +213,12 @@ async function fetchFileContent(filename) {
       topK: 1000,
       includeMetadata: true,
     });
-  
+
     const chunks = queryResponse.matches.map(match => ({
       chunkContent: match.metadata.chunkContent,
       chunkIndex: match.metadata.chunkIndex,
     }));
-console.log(chunks);
+    console.log(chunks);
     if (chunks.length === 0) {
       throw new Error('No chunks found for the specified filename.');
     }
@@ -230,7 +235,7 @@ console.log(chunks);
 
 app.get('/file-content', authenticateToken, async (req, res) => {
   try {
-    console.log("auth tok suc",req.query.filename);
+    console.log("auth tok suc", req.query.filename);
     const filename = req.query.filename;
     if (!filename) {
       return res.status(400).send('Filename is required.');
