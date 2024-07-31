@@ -10,7 +10,7 @@ const Login = ({ onLogin }) => {
   const handleLogin = async () => {
     try {
       console.log("Attempting login with:", username, password);
-      const response = await axios.post('http://localhost:5000/login', { username, password });
+      const response = await axios.post('http://localhost:2536/login', { username, password });
       console.log("Login response:", response);
       localStorage.setItem('token', response.data.token); // Save token
       onLogin();
@@ -33,7 +33,7 @@ const Login = ({ onLogin }) => {
       setError('Invalid username or password');
     }
   };
-  
+
 
   return (
     <Container maxWidth="xs">

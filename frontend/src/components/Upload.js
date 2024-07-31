@@ -79,7 +79,7 @@ const Upload = () => {
     formData.append('file', new File([blob], files[0].name));
 
     try {
-      const response = await axios.post('http://localhost:5000/upsert', formData, {
+      const response = await axios.post('http://localhost:2536/upsert', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           ...getAuthHeaders()

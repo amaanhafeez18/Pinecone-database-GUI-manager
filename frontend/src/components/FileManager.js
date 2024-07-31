@@ -42,7 +42,7 @@ function FileManager() {
   const fetchFiles = async () => {
     setLoadingFiles(true);
     try {
-      const response = await axios.get('http://localhost:5000/listfile', { headers: getAuthHeaders() });
+      const response = await axios.get('http://localhost:2536/listfile', { headers: getAuthHeaders() });
       setFiles(response.data);
     } catch (error) {
       console.error('Error fetching file list:', error);
@@ -53,7 +53,7 @@ function FileManager() {
   const fetchContent = async (file) => {
     setLoadingContent(true);
     try {
-      const response = await axios.get(`http://localhost:5000/file-content?filename=${encodeURIComponent(file)}`, { headers: getAuthHeaders() });
+      const response = await axios.get(`http://localhost:2536/file-content?filename=${encodeURIComponent(file)}`, { headers: getAuthHeaders() });
       setContent(response.data);
       setExpanded(true);
     } catch (error) {
@@ -82,7 +82,7 @@ function FileManager() {
     setUploading(true);
     try {
       // Delete the file
-      await axios.delete(`http://localhost:5000/delete-file`, {
+      await axios.delete(`http://localhost:2536/delete-file`, {
         headers: getAuthHeaders(),
         params: { filename: selectedFile }
       });
@@ -91,7 +91,7 @@ function FileManager() {
       const blob = new Blob([content], { type: 'text/plain' });
       const file = new File([blob], selectedFile, { type: 'text/plain' });
       formData.append('file', file);
-      await axios.post('http://localhost:5000/upsert', formData, {
+      await axios.post('http://localhost:2536/upsert', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           ...getAuthHeaders(),
@@ -110,7 +110,7 @@ function FileManager() {
       setDeleting(true);
       setDeleteId(filename);
       try {
-        const response = await axios.delete(`http://localhost:5000/delete-file`, {
+        const response = await axios.delete(`http://localhost:2536/delete-file`, {
           headers: getAuthHeaders(),
           params: { filename }
         });

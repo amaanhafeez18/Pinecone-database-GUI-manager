@@ -30,7 +30,7 @@ function FileContent({ selectedFile, onFileUpdated }) {
   const fetchContent = async (file) => {
     setLoading(true);
     try {
-      const response = await axios.get(`http://localhost:5000/file-content?filename=${encodeURIComponent(file)}`, {
+      const response = await axios.get(`http://localhost:2536/file-content?filename=${encodeURIComponent(file)}`, {
         headers: getAuthHeaders()
       });
       setContent(response.data);
@@ -61,7 +61,7 @@ function FileContent({ selectedFile, onFileUpdated }) {
     setUploading(true);
     try {
       // Delete the file
-      await axios.delete(`http://localhost:5000/delete-file`, {
+      await axios.delete(`http://localhost:2536/delete-file`, {
         headers: getAuthHeaders(),
         params: { filename }
       });
@@ -72,7 +72,7 @@ function FileContent({ selectedFile, onFileUpdated }) {
       const file = new File([blob], filename, { type: 'text/plain' });
       formData.append('file', file);
 
-      await axios.post('http://localhost:5000/upsert', formData, {
+      await axios.post('http://localhost:2536/upsert', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           ...getAuthHeaders(),
@@ -119,7 +119,7 @@ function FileContent({ selectedFile, onFileUpdated }) {
           sx={{ mb: 2 }}
           disabled
         />
-        
+
         {editable ? (
           <TextField
             multiline
