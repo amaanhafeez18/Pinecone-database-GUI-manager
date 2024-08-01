@@ -6,6 +6,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import EditIcon from '@mui/icons-material/Edit';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+
 
 function FileContent({ selectedFile, onFileUpdated }) {
   const [filename, setFilename] = useState(selectedFile || '');
@@ -30,7 +32,7 @@ function FileContent({ selectedFile, onFileUpdated }) {
   const fetchContent = async (file) => {
     setLoading(true);
     try {
-      const response = await axios.get(`http://localhost:2536/file-content?filename=${encodeURIComponent(file)}`, {
+      const response = await axios.get(`${BACKEND_URL}/file-content?filename=${encodeURIComponent(file)}`, {
         headers: getAuthHeaders()
       });
       setContent(response.data);
@@ -61,7 +63,7 @@ function FileContent({ selectedFile, onFileUpdated }) {
     setUploading(true);
     try {
       // Delete the file
-      await axios.delete(`http://localhost:2536/delete-file`, {
+      await axios.delete(`${BACKEND_URL}/delete-file`, {
         headers: getAuthHeaders(),
         params: { filename }
       });
@@ -72,7 +74,7 @@ function FileContent({ selectedFile, onFileUpdated }) {
       const file = new File([blob], filename, { type: 'text/plain' });
       formData.append('file', file);
 
-      await axios.post('http://localhost:2536/upsert', formData, {
+      await axios.post(`${BACKEND_URL}/upsert`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           ...getAuthHeaders(),

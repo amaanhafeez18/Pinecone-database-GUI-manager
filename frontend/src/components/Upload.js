@@ -6,6 +6,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import EditIcon from '@mui/icons-material/Edit';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 const Upload = () => {
   const [files, setFiles] = useState([]);
@@ -79,7 +80,7 @@ const Upload = () => {
     formData.append('file', new File([blob], files[0].name));
 
     try {
-      const response = await axios.post('http://localhost:2536/upsert', formData, {
+      const response = await axios.post(`${BACKEND_URL}/upsert`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           ...getAuthHeaders()

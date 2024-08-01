@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Box, Button, Container, TextField, Typography } from '@mui/material';
 import axios from 'axios';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+
 
 const Login = ({ onLogin }) => {
   const [username, setUsername] = useState('');
@@ -10,7 +12,7 @@ const Login = ({ onLogin }) => {
   const handleLogin = async () => {
     try {
       console.log("Attempting login with:", username, password);
-      const response = await axios.post('http://localhost:2536/login', { username, password });
+      const response = await axios.post(`${BACKEND_URL}/login`, { username, password });
       console.log("Login response:", response);
       localStorage.setItem('token', response.data.token); // Save token
       onLogin();
