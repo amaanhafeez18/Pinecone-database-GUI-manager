@@ -78,12 +78,17 @@ const Upload = () => {
     const formData = new FormData();
     const blob = new Blob([contentToUpload], { type: 'text/plain' });
     formData.append('file', new File([blob], files[0].name));
-
+    const password = localStorage.getItem("password");
+    const category = localStorage.getItem("category")
     try {
       const response = await axios.post(`${BACKEND_URL}/upsert`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           ...getAuthHeaders()
+        },
+        params: {
+          category,
+          password // Include the password as a query parameter
         }
       });
       setUploadMessage(`${files[0].name} uploaded successfully. Please click "Load Files" to refresh the list of files.`);

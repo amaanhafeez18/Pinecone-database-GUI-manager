@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Box, TextField, Button, Typography, CircularProgress, Paper, IconButton, Grid, Collapse, Card, CardContent, Tooltip, ListItemIcon, Alert
+  Box, TextField, Button, Typography, CircularProgress, Paper, IconButton, Grid, Collapse, Card, CardContent, Tooltip, ListItemIcon, Alert, MenuItem, Select, FormControl, InputLabel
 } from '@mui/material';
 import axios from 'axios';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -10,6 +10,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { red } from '@mui/material/colors';
 import DescriptionIcon from '@mui/icons-material/Description';
+
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 function FileManager() {
@@ -24,9 +25,16 @@ function FileManager() {
   const [deleting, setDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [deleteNotification, setDeleteNotification] = useState('');
+  const [category, setCategory] = useState('ALL DEPT'); // Default value
+  const [password, setPassword] = useState(''); // State for password input
+  const [deptOptions, setDeptOptions] = useState([]); // State for dropdown options
+  const [loadingDepts, setLoadingDepts] = useState(false); // State for loading dropdown options
+  const [error, setError] = useState(''); // State for error messages
 
   useEffect(() => {
-    fetchFiles(); // Fetch files when component mounts
+  
+
+    fetchDeptOptions();
   }, []);
 
   useEffect(() => {
@@ -35,18 +43,57 @@ function FileManager() {
     }
   }, [selectedFile]);
 
+  useEffect(() => {
+    // Clear files when category changes
+    setFiles([]);
+    setSelectedFile('');
+    setContent('');
+    // Update localStorage when category changes
+    localStorage.setItem('category', category);
+  }, [category]);
+
+  useEffect(() => {
+    // Update localStorage when password changes
+    localStorage.setItem('password', password);
+  }, [password]);
+
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
+  const fetchDeptOptions = async () => {
+    setLoadingDepts(true);
+    try {
+      const response = await axios.get(`${BACKEND_URL}/array-values`, { headers: getAuthHeaders() });
+      setDeptOptions(response.data);
+    } catch (error) {
+      console.error('Error fetching department options:', error);
+    }
+    setLoadingDepts(false);
+  };
+
   const fetchFiles = async () => {
     setLoadingFiles(true);
+    setError(''); // Reset error message
     try {
-      const response = await axios.get(`${BACKEND_URL}/listfile`, { headers: getAuthHeaders() });
+      const response = await axios.get(`${BACKEND_URL}/listfile`, {
+        headers: getAuthHeaders(), // Include authentication headers
+        params: {
+          category,
+          password // Include the password as a query parameter
+        }
+      });
       setFiles(response.data);
     } catch (error) {
       console.error('Error fetching file list:', error);
+      if (error.response && error.response.data && error.response.data.error) {
+        // Display the error message from the backend
+        setError(error.response.data.error);
+      } else {
+        // Display a generic error message
+        setError('Failed to fetch file list.');
+      }
     }
     setLoadingFiles(false);
   };
@@ -96,6 +143,10 @@ function FileManager() {
         headers: {
           'Content-Type': 'multipart/form-data',
           ...getAuthHeaders(),
+        },
+        params: {
+          category,
+          password // Include the password as a query parameter
         }
       });
       setEditable(false);
@@ -139,9 +190,45 @@ function FileManager() {
         <Typography variant="h4" gutterBottom>
           Polichat Database
         </Typography>
-        <Button variant="contained" onClick={fetchFiles} sx={{ mb: 2 }}>
-          Load Files
+        <FormControl fullWidth sx={{ mb: 2 }}>
+          <InputLabel id="category-label">Category</InputLabel>
+          <Select
+            labelId="category-label"
+            id="category"
+            value={category}
+            label="Category"
+            onChange={(e) => setCategory(e.target.value)}
+            disabled={loadingDepts}
+          >
+            <MenuItem value="ALL DEPT">ALL DEPT</MenuItem>
+            {deptOptions.map((dept) => (
+              <MenuItem key={dept} value={dept}>
+                {dept}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <TextField
+          type="password"
+          label="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          fullWidth
+          sx={{ mb: 2 }}
+        />
+        <Button
+          variant="contained"
+          onClick={fetchFiles}
+          sx={{ mb: 2 }}
+          disabled={!password} // Disable the button if password is empty
+        >
+          Login and Load Files
         </Button>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
         {loadingFiles ? (
           <CircularProgress />
         ) : (
@@ -168,81 +255,71 @@ function FileManager() {
         )}
       </Paper>
       {selectedFile && (
-        <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h4" sx={{ flexGrow: 1 }}>
-              {selectedFile}
-            </Typography>
-            <Tooltip title={editable ? 'View Mode' : 'Edit Mode'}>
-              <IconButton
-                size="large"
-                onClick={editable ? handleView : handleEdit}
-                aria-expanded={expanded}
-                sx={{ ml: 'auto' }}
-              >
-                {editable ? <VisibilityIcon fontSize="large" /> : <EditIcon fontSize="large" />}
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete File">
-              <IconButton
-                size="large"
-                onClick={() => deleteFile(selectedFile)}
-                sx={{ color: red[500] }}
-              >
-                <DeleteIcon fontSize="large" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title={expanded ? 'Collapse' : 'Expand'}>
-              <IconButton
-                size="large"
-                onClick={handleToggleExpand}
-                aria-expanded={expanded}
-              >
-                {expanded ? <ExpandLessIcon fontSize="large" /> : <ExpandMoreIcon fontSize="large" />}
-              </IconButton>
-            </Tooltip>
+        <Paper elevation={3} sx={{ p: 2 }}>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="h6">{selectedFile}</Typography>
+            <Button onClick={handleToggleExpand} variant="contained" sx={{ mb: 1 }}>
+              {expanded ? 'Collapse' : 'Expand'}
+              {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </Button>
+            {expanded && (
+              <Collapse in={expanded}>
+                {loadingContent ? (
+                  <CircularProgress />
+                ) : (
+                  <Box>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={10}
+                      variant="outlined"
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      disabled={!editable}
+                    />
+                    {editable ? (
+                      <Button
+                        variant="contained"
+                        onClick={handleSaveAndUpload}
+                        sx={{ mt: 2 }}
+                        disabled={uploading}
+                      >
+                        {uploading ? 'Uploading...' : 'Save and Upload'}
+                      </Button>
+                    ) : (
+                      <>
+                        <Tooltip title="Edit">
+                          <IconButton onClick={handleEdit} color="primary">
+                            <EditIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="View">
+                          <IconButton onClick={handleView} color="primary">
+                            <VisibilityIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    )}
+                    <Tooltip title="Delete">
+                      <IconButton
+                        onClick={() => deleteFile(selectedFile)}
+                        color="error"
+                        disabled={deleting}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                )}
+              </Collapse>
+            )}
           </Box>
-          <Collapse in={expanded} timeout="auto" unmountOnExit>
-            {loadingContent ? (
-              <CircularProgress />
-            ) : editable ? (
-              <TextField
-                multiline
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                fullWidth
-                rows={10}
-                variant="outlined"
-              />
-            ) : (
-              <Typography variant="body1" component="div" sx={{ whiteSpace: 'pre-wrap', mb: 2 }}>
-                {content}
-              </Typography>
-            )}
-            {uploading && (
-              <CircularProgress sx={{ display: 'block', mx: 'auto', my: 2 }} />
-            )}
-            {editable && (
-              <Button
-                onClick={handleSaveAndUpload}
-                variant="contained"
-                color="primary"
-                sx={{ mt: 2 }}
-              >
-                Save and Upload
-              </Button>
-            )}
-          </Collapse>
+          {deleteNotification && (
+            <Alert severity="success">
+              {deleteNotification}
+            </Alert>
+          )}
         </Paper>
-      )}
-      {deleteNotification && (
-        <Alert
-          severity="info"
-          sx={{ mb: 2, bgcolor: 'red', color: 'white' }}
-          onClose={() => setDeleteNotification('')}
-        >
-          {deleteNotification}
-        </Alert>
       )}
     </Box>
   );

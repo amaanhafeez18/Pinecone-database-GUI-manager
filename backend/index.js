@@ -13,7 +13,6 @@ config({ path: ENV_FILE });
 
 const app = express();
 const PORT = process.env.PORT || 2536;
-console.log(process.env.PINECONE_API_KEY);
 const pc = new Pinecone({
   apiKey: process.env.PINECONE_API_KEY,
 });
@@ -42,10 +41,8 @@ const authenticateToken = (req, res, next) => {
 
 // Function to handle user authentication
 app.post('/login', async (req, res) => {
-  console.log("starting");
   console.log(req.body);
   const { username, password } = req.body;
-  console.log(username, password);
   if (!username || !password) return res.status(400).send('Username and password required.');
   const saltRounds = 10;
 
@@ -93,15 +90,57 @@ function dynamicChunking(text, maxChunkSize, minOverlapSize) {
 
   return chunks;
 }
-
-async function listFilesLogic() {
+async function listFilesLogic(category, password) {
   try {
     const index = pc.index(process.env.PINECONE_INDEX_NAME);
+
+    const deptNames = getEnvDictionary('DEPT_NAMES');
+
+    // Check if the provided category exists and password matches
+    if (!deptNames[category] || deptNames[category] !== password) {
+      throw new Error('Invalid category or password');
+    }
+    const stats = await index.describeIndexStats();
+    console.log(stats.totalRecordCount);
+    const dummyVector = Array(3072).fill(0.0);
+    const queryResponse = await index.query({
+      vector: dummyVector,
+      filter: { category: { $eq: category } },
+      topK: stats.totalRecordCount,
+      includeMetadata: true,
+      includeValues: false
+    });
+    console.log(queryResponse);
+    const uniqueFilenames = new Set();
+    queryResponse.matches.forEach(match => {
+      const idParts = match.id.split('_chunk_');
+      if (idParts.length > 0) {
+        uniqueFilenames.add(idParts[0]);
+      }
+    });
+
+    const filenames = Array.from(uniqueFilenames).map(filename => ({ filename })).sort((a, b) => a.filename.localeCompare(b.filename));
+
+    return filenames;
+  } catch (error) {
+    console.error('Error fetching list of files:', error.message);
+    // Send the original error message through to the endpoint handler
+    throw new Error(error.message);
+  }
+}
+
+async function listFilesLogicUpsert(category, password) {
+  try {
+    const deptNames = getEnvDictionary('DEPT_NAMES');
+
+    // Check if the provided category exists and password matches
+    if (!deptNames[category] || deptNames[category] !== password) {
+      throw new Error('Invalid category or password');
+    }
+
+    const index = pc.index(process.env.PINECONE_INDEX_NAME);
     let results = await index.listPaginated({});
-    let
-
-
-      allVectors = results.vectors;
+    let allVectors = results.vectors;
 
     while (results.pagination && results.pagination.next) {
       results = await index.listPaginated({ paginationToken: results.pagination.next });
@@ -121,13 +160,31 @@ async function listFilesLogic() {
     return filenames;
   } catch (error) {
     console.error('Error fetching list of files:', error.message);
-    throw new Error('Failed to fetch list of files');
+    // Send the original error message through to the endpoint handler
+    throw new Error(error.message);
   }
 }
 
 app.get('/listfile', authenticateToken, async (req, res) => {
   try {
-    const filenames = await listFilesLogic();
+    const { category, password } = req.query;
+    console.log('Category:', category);
+    console.log('Password:', password);
+
+    const deptNames = getEnvDictionary('DEPT_NAMES');
+    let filenames = ""; // Use 'let' instead of 'const'
+
+    // Check if the provided category exists and password matches
+    if (!deptNames[category] || deptNames[category] !== password) {
+      throw new Error('Invalid category or password');
+    }
+
+    if (category === "ALL DEPT") {
+      filenames = await listFilesLogicUpsert(category, password);
+    } else {
+      filenames = await listFilesLogic(category, password);
+    }
+
     res.json(filenames);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -137,16 +194,18 @@ app.get('/listfile', authenticateToken, async (req, res) => {
 app.get('/get', async (req, res) => {
   res.send("This is test backend get method");
 });
-
 app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) => {
   try {
     console.log("hi");
     if (!req.files || req.files.length === 0) {
       return res.status(400).send('No files uploaded.');
     }
-
+    const { category, password } = req.query;
+    console.log('Category1:', category);
+    console.log('Password2:', password);
     const files = req.files;
-    const existingFilenames = await listFilesLogic();
+
+    const existingFilenames = await listFilesLogicUpsert(category, password);
 
     for (const file of files) {
       if (!file.buffer) {
@@ -155,7 +214,8 @@ app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) =>
 
       const lastDotIndex = file.originalname.lastIndexOf('.');
       const filenameWithoutExt = lastDotIndex !== -1 ? file.originalname.substring(0, lastDotIndex) : file.originalname;
-
+      const categorytest = category;
+      console.log(categorytest);
       const filenameExists = existingFilenames.some(item => item.filename === filenameWithoutExt);
       if (filenameExists) {
         return res.status(409).send(`File '${filenameWithoutExt}' already exists.`);
@@ -175,7 +235,8 @@ app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) =>
           metadata: {
             filename: filenameWithoutExt,
             chunkIndex: i,
-            chunkContent: chunk
+            chunkContent: chunk,
+            category: categorytest
           },
         };
         await index.upsert([upsertData]);
@@ -190,6 +251,44 @@ app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) =>
     res.status(500).send('Failed to process file upload.');
   }
 });
+// Private function to parse environment variable
+function getEnvDictionary(key) {
+  const jsonString = process.env[key];
+  if (!jsonString) {
+    throw new Error(`${key} is not defined in the environment file.`);
+  }
+  
+  try {
+    return JSON.parse(jsonString);
+  } catch (error) {
+    throw new Error(`Error parsing ${key} JSON string.`);
+  }
+}
+app.get('/array-values', authenticateToken, (req, res) => {
+  try {
+    // Retrieve and parse the dictionary from the environment variable
+    const deptNames = getEnvDictionary('DEPT_NAMES');
+
+
+    const keysArray = Object.keys(deptNames);
+    console.log(keysArray);
+
+    // Send the keys array as a JSON response
+    res.json(keysArray);
+  } catch (error) {
+    console.error('Error fetching dictionary values:', error.message);
+    res.status(500).send(error.message);
+  }
+});
+
+
+
+
+
+
+
+
+
 
 app.get('/query', authenticateToken, async (req, res) => {
   const { text, filter, topK } = req.query;
@@ -218,7 +317,6 @@ async function fetchFileContent(filename) {
       chunkContent: match.metadata.chunkContent,
       chunkIndex: match.metadata.chunkIndex,
     }));
-    console.log(chunks);
     if (chunks.length === 0) {
       throw new Error('No chunks found for the specified filename.');
     }

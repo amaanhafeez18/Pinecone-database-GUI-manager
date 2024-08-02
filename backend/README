@@ -1,0 +1,13 @@
+PLEASE INSERT THIS INTO THE ENV FOR THE BACKEND. 
+
+DEPT_NAMES={"ALL DEPT":"1234","HR":"0000","IT":"0909","COMPLIANCE":"8989","Meow":"9090"}
+
+The way the system is set up, the drop down menu in the frontend pulls the names of the departments from the backend, and the user must enter 
+the appropriate password for their department and click "login and load files". The user is not able to upload a file unless they login first. 
+
+
+Uploading: to upload, login with the relevant department credentials, select a file, wait for it to upload. refresh list of files. The file is now associated with that department. 
+
+
+Known bug:
+When logged in with ALL-DEPT, all files are visible for the organization, however editing and saving those files sets their category as ALL-DEPT instead of the orignal one
