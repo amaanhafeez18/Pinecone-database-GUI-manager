@@ -25,6 +25,7 @@ function FileManager() {
   const [deleting, setDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [deleteNotification, setDeleteNotification] = useState('');
+  const [cantEditNotification, setCantEditNotification] = useState(''); // State for "can't edit" notification
   const [category, setCategory] = useState('ALL DEPT'); // Default value
   const [password, setPassword] = useState(''); // State for password input
   const [deptOptions, setDeptOptions] = useState([]); // State for dropdown options
@@ -32,8 +33,6 @@ function FileManager() {
   const [error, setError] = useState(''); // State for error messages
 
   useEffect(() => {
-  
-
     fetchDeptOptions();
   }, []);
 
@@ -44,16 +43,13 @@ function FileManager() {
   }, [selectedFile]);
 
   useEffect(() => {
-    // Clear files when category changes
     setFiles([]);
     setSelectedFile('');
     setContent('');
-    // Update localStorage when category changes
     localStorage.setItem('category', category);
   }, [category]);
 
   useEffect(() => {
-    // Update localStorage when password changes
     localStorage.setItem('password', password);
   }, [password]);
 
@@ -119,11 +115,26 @@ function FileManager() {
   };
 
   const handleEdit = () => {
-    setEditable(true);
+    if (category !== 'ALL DEPT') {
+      setEditable(true);
+    } else {
+      setCantEditNotification('Editing is not allowed for files in the "ALL DEPT" category.');
+      setTimeout(() => setCantEditNotification(''), 5000); // Clear notification after 5 seconds
+    }
   };
 
   const handleView = () => {
     setEditable(false);
+  };
+
+  const retryRequest = async (fn, retries = 3, delay = 1000) => {
+    try {
+      return await fn();
+    } catch (error) {
+      if (retries <= 0) throw error;
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return retryRequest(fn, retries - 1, delay);
+    }
   };
 
   const handleSaveAndUpload = async () => {
@@ -134,12 +145,14 @@ function FileManager() {
         headers: getAuthHeaders(),
         params: { filename: selectedFile }
       });
+
       // Re-upload the edited content
       const formData = new FormData();
       const blob = new Blob([content], { type: 'text/plain' });
       const file = new File([blob], selectedFile, { type: 'text/plain' });
       formData.append('file', file);
-      await axios.post(`${BACKEND_URL}/upsert`, formData, {
+
+      await retryRequest(() => axios.post(`${BACKEND_URL}/upsert`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           ...getAuthHeaders(),
@@ -148,11 +161,17 @@ function FileManager() {
           category,
           password // Include the password as a query parameter
         }
-      });
+      }));
+
+      // Show confirmation message
+      setContent('');
       setEditable(false);
       fetchFiles(); // Refresh the file list
+      setDeleteNotification(`File ${selectedFile} uploaded successfully`);
+      alert('File has been successfully saved and uploaded.');
     } catch (error) {
       console.error('Error saving and uploading file:', error);
+      alert('Failed to save and upload file.');
     }
     setUploading(false);
   };
@@ -275,7 +294,7 @@ function FileManager() {
                       variant="outlined"
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
-                      disabled={!editable}
+                      disabled={!editable || category === 'ALL DEPT'}
                     />
                     {editable ? (
                       <Button
@@ -284,7 +303,7 @@ function FileManager() {
                         sx={{ mt: 2 }}
                         disabled={uploading}
                       >
-                        {uploading ? 'Uploading...' : 'Save and Upload'}
+                        {uploading ? <CircularProgress size={24} /> : 'Save and Upload'}
                       </Button>
                     ) : (
                       <>
@@ -306,7 +325,7 @@ function FileManager() {
                         color="error"
                         disabled={deleting}
                       >
-                        <DeleteIcon />
+                        {deleting ? <CircularProgress size={24} /> : <DeleteIcon />}
                       </IconButton>
                     </Tooltip>
                   </Box>
@@ -317,6 +336,11 @@ function FileManager() {
           {deleteNotification && (
             <Alert severity="success">
               {deleteNotification}
+            </Alert>
+          )}
+          {cantEditNotification && (
+            <Alert severity="warning">
+              {cantEditNotification}
             </Alert>
           )}
         </Paper>

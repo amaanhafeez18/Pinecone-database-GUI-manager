@@ -41,14 +41,12 @@ const authenticateToken = (req, res, next) => {
 
 // Function to handle user authentication
 app.post('/login', async (req, res) => {
-  console.log(req.body);
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).send('Username and password required.');
   const saltRounds = 10;
 
   // Hashing the password
   const hashedPassword = await bcrypt.hash(process.env.PASSWORD, saltRounds);
-  console.log(hashedPassword);
   // Replace this with your actual user fetching logic
   const user = { username: process.env.USERNAME, password: hashedPassword }; // Example hashed password
 
@@ -70,26 +68,34 @@ async function extractVectorFromText(text) {
 }
 
 function dynamicChunking(text, maxChunkSize, minOverlapSize) {
-  const sentences = text.match(/[^.?!\n]+[.?!\n]+/g) || [text];
+  // Split text into sentences
+  const sentences = text.match(/[^.?!\n]+[.?!\n]+|[^.?!\n]+$/g) || [text];
   const chunks = [];
   let currentChunk = '';
 
   for (const sentence of sentences) {
+    // Check if adding the next sentence exceeds the max chunk size
     if ((currentChunk.length + sentence.length) > maxChunkSize) {
-      if (currentChunk.length > 0) {
-        chunks.push(currentChunk.trim());
-      }
-      currentChunk = currentChunk.slice(-minOverlapSize);
+      // Push the current chunk to chunks
+      chunks.push(currentChunk.trim());
+
+      // Create a new chunk with overlap from the end of the previous chunk
+      currentChunk = currentChunk.slice(-minOverlapSize).trim();
     }
+    // Add sentence to current chunk
     currentChunk += sentence + ' ';
   }
 
-  if (currentChunk) {
+  // Add the last chunk if it's not empty
+  if (currentChunk.trim()) {
     chunks.push(currentChunk.trim());
   }
 
   return chunks;
 }
+
+
+
 async function listFilesLogic(category, password) {
   try {
     const index = pc.index(process.env.PINECONE_INDEX_NAME);
@@ -101,7 +107,6 @@ async function listFilesLogic(category, password) {
       throw new Error('Invalid category or password');
     }
     const stats = await index.describeIndexStats();
-    console.log(stats.totalRecordCount);
     const dummyVector = Array(3072).fill(0.0);
     const queryResponse = await index.query({
       vector: dummyVector,
@@ -110,7 +115,6 @@ async function listFilesLogic(category, password) {
       includeMetadata: true,
       includeValues: false
     });
-    console.log(queryResponse);
     const uniqueFilenames = new Set();
     queryResponse.matches.forEach(match => {
       const idParts = match.id.split('_chunk_');
@@ -191,9 +195,7 @@ app.get('/listfile', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/get', async (req, res) => {
-  res.send("This is test backend get method");
-});
+
 app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) => {
   try {
     console.log("hi");
@@ -201,12 +203,12 @@ app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) =>
       return res.status(400).send('No files uploaded.');
     }
     const { category, password } = req.query;
-    console.log('Category1:', category);
-    console.log('Password2:', password);
+    // console.log('Category1:', category);
+    // console.log('Password2:', password);
     const files = req.files;
 
     const existingFilenames = await listFilesLogicUpsert(category, password);
-
+    console.log("existing file names",existingFilenames);
     for (const file of files) {
       if (!file.buffer) {
         return res.status(400).send('Uploaded file has no buffer.');
@@ -215,17 +217,22 @@ app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) =>
       const lastDotIndex = file.originalname.lastIndexOf('.');
       const filenameWithoutExt = lastDotIndex !== -1 ? file.originalname.substring(0, lastDotIndex) : file.originalname;
       const categorytest = category;
-      console.log(categorytest);
+      // console.log("meow this is category",categorytest);
       const filenameExists = existingFilenames.some(item => item.filename === filenameWithoutExt);
       if (filenameExists) {
+        console.log("massive fuck up if you see this,");
         return res.status(409).send(`File '${filenameWithoutExt}' already exists.`);
       }
 
       const text = file.buffer.toString();
+       console.log("file text being stored");
+       console.log(text);
       const chunks = dynamicChunking(text, 1000, 200);
-
+      console.log("following are chunks output");
+      console.log(chunks);
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
+        // console.log("the following are chunks",chunk, i);
         const vector = await extractVectorFromText(chunk);
 
         const index = pc.index(process.env.PINECONE_INDEX_NAME);
@@ -239,7 +246,7 @@ app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) =>
             category: categorytest
           },
         };
-        await index.upsert([upsertData]);
+         await index.upsert([upsertData]);
 
         console.log(`Stored vector for file: ${filenameWithoutExt}, chunk: ${i}`);
       }
@@ -346,6 +353,13 @@ app.get('/file-content', authenticateToken, async (req, res) => {
     res.status(500).send('Failed to fetch file content.');
   }
 });
+const text = "This is a long text that should be split into chunks based on size constraints. Each chunk will overlap slightly with the previous one to ensure context is preserved.";
+const maxChunkSize = 80;
+const minOverlapSize = 20;
+
+const chunks = dynamicChunking(text, maxChunkSize, minOverlapSize);
+console.log(chunks);
+
 
 app.delete('/delete-file', authenticateToken, async (req, res) => {
   try {
@@ -353,6 +367,7 @@ app.delete('/delete-file', authenticateToken, async (req, res) => {
     if (!filename) {
       return res.status(400).send('Filename is required.');
     }
+    console.log("attempting deletion:",filename);
 
     const index = pc.index(process.env.PINECONE_INDEX_NAME);
     const dummyVector = Array(3072).fill(0.0);
@@ -364,9 +379,10 @@ app.delete('/delete-file', authenticateToken, async (req, res) => {
     });
 
     const vectorIds = queryResponse.matches.map(match => match.id);
+    console.log(vectorIds);
     await index.deleteMany(vectorIds);
-
     res.send(`Deleted vectors for file: ${filename}`);
+    console.log("deleted the file i think", filename);
   } catch (error) {
     console.error('Error deleting file and related chunks/vectors:', error.message);
     res.status(500).send('Failed to delete file and related chunks/vectors.');
