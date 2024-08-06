@@ -8,6 +8,3 @@ the appropriate password for their department and click "login and load files". 
 
 Uploading: to upload, login with the relevant department credentials, select a file, wait for it to upload. refresh list of files. The file is now associated with that department. 
 
-
-Known bug:
-When logged in with ALL-DEPT, all files are visible for the organization, however editing and saving those files sets their category as ALL-DEPT instead of the orignal one
