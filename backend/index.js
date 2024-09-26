@@ -172,9 +172,6 @@ async function listFilesLogicUpsert(category, password) {
 app.get('/listfile', authenticateToken, async (req, res) => {
   try {
     const { category, password } = req.query;
-    console.log('Category:', category);
-    console.log('Password:', password);
-
     const deptNames = getEnvDictionary('DEPT_NAMES');
     let filenames = ""; // Use 'let' instead of 'const'
 
@@ -198,17 +195,13 @@ app.get('/listfile', authenticateToken, async (req, res) => {
 
 app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) => {
   try {
-    console.log("hi");
     if (!req.files || req.files.length === 0) {
       return res.status(400).send('No files uploaded.');
     }
     const { category, password } = req.query;
-    // console.log('Category1:', category);
-    // console.log('Password2:', password);
     const files = req.files;
 
     const existingFilenames = await listFilesLogicUpsert(category, password);
-    console.log("existing file names",existingFilenames);
     for (const file of files) {
       if (!file.buffer) {
         return res.status(400).send('Uploaded file has no buffer.');
@@ -217,22 +210,15 @@ app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) =>
       const lastDotIndex = file.originalname.lastIndexOf('.');
       const filenameWithoutExt = lastDotIndex !== -1 ? file.originalname.substring(0, lastDotIndex) : file.originalname;
       const categorytest = category;
-      // console.log("meow this is category",categorytest);
       const filenameExists = existingFilenames.some(item => item.filename === filenameWithoutExt);
       if (filenameExists) {
-        console.log("massive fuck up if you see this,");
         return res.status(409).send(`File '${filenameWithoutExt}' already exists.`);
       }
 
       const text = file.buffer.toString();
-       console.log("file text being stored");
-       console.log(text);
       const chunks = dynamicChunking(text, 1000, 200);
-      console.log("following are chunks output");
-      console.log(chunks);
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
-        // console.log("the following are chunks",chunk, i);
         const vector = await extractVectorFromText(chunk);
 
         const index = pc.index(process.env.PINECONE_INDEX_NAME);
@@ -243,7 +229,7 @@ app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) =>
             filename: filenameWithoutExt,
             chunkIndex: i,
             chunkContent: chunk,
-            category: categorytest
+            category: categor[ytest
           },
         };
          await index.upsert([upsertData]);
@@ -278,7 +264,6 @@ app.get('/array-values', authenticateToken, (req, res) => {
 
 
     const keysArray = Object.keys(deptNames);
-    console.log(keysArray);
 
     // Send the keys array as a JSON response
     res.json(keysArray);
@@ -340,7 +325,6 @@ async function fetchFileContent(filename) {
 
 app.get('/file-content', authenticateToken, async (req, res) => {
   try {
-    console.log("auth tok suc", req.query.filename);
     const filename = req.query.filename;
     if (!filename) {
       return res.status(400).send('Filename is required.');
@@ -358,7 +342,6 @@ const maxChunkSize = 80;
 const minOverlapSize = 20;
 
 const chunks = dynamicChunking(text, maxChunkSize, minOverlapSize);
-console.log(chunks);
 
 
 app.delete('/delete-file', authenticateToken, async (req, res) => {
@@ -367,7 +350,6 @@ app.delete('/delete-file', authenticateToken, async (req, res) => {
     if (!filename) {
       return res.status(400).send('Filename is required.');
     }
-    console.log("attempting deletion:",filename);
 
     const index = pc.index(process.env.PINECONE_INDEX_NAME);
     const dummyVector = Array(3072).fill(0.0);
@@ -379,10 +361,8 @@ app.delete('/delete-file', authenticateToken, async (req, res) => {
     });
 
     const vectorIds = queryResponse.matches.map(match => match.id);
-    console.log(vectorIds);
     await index.deleteMany(vectorIds);
     res.send(`Deleted vectors for file: ${filename}`);
-    console.log("deleted the file i think", filename);
   } catch (error) {
     console.error('Error deleting file and related chunks/vectors:', error.message);
     res.status(500).send('Failed to delete file and related chunks/vectors.');
