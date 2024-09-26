@@ -1,4 +1,7 @@
-PLEASE INSERT THIS INTO THE ENV FOR THE BACKEND. 
+PLEASE INSERT THIS INTO THE ENV FOR THE BACKEND FOR IT WORK. 
+FILL IN THE ENV FILE FOR BOTH FRONTEND AND BACKEND.
+
+The username and password field in the env are for the log in screen.
 
 DEPT_NAMES={"ALL DEPT":"1234","HR":"0000","IT":"0909","COMPLIANCE":"8989","Meow":"9090"}
 
@@ -8,3 +11,7 @@ the appropriate password for their department and click "login and load files". 
 
 Uploading: to upload, login with the relevant department credentials, select a file, wait for it to upload. refresh list of files. The file is now associated with that department. 
 
+TO run, 1) CD into frontend, run  "npm start".
+        2) CD into backend in a separate terminal and run "node index.js"
+
+        

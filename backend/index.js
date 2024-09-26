@@ -229,7 +229,7 @@ app.post('/upsert', authenticateToken, upload.array('file'), async (req, res) =>
             filename: filenameWithoutExt,
             chunkIndex: i,
             chunkContent: chunk,
-            category: categor[ytest
+            category: categorytest
           },
         };
          await index.upsert([upsertData]);
