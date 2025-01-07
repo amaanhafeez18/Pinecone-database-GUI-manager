@@ -1,10 +1,14 @@
 
 TO run, 1) CD into frontend, run  "npm start".
         2) CD into backend in a separate terminal and run "node index.js"
-FILL IN THE ENV FILE FOR BOTH FRONTEND AND BACKEND.
 
-The username and password field in the env are for the log in screen.
+FILL IN THE ENV FILE FOR BOTH FRONTEND AND BACKEND WITH THE RELEVANT PINECONE DATABASE AND OPEN AI KEYS.
 
+The login screen default password and username is 
+USERNAME=admin
+PASSWORD=12345
+
+The default passwords for the different departments are listed below.
 DEPT_NAMES={"ALL DEPT":"1234","HR":"0000","IT":"0909","COMPLIANCE":"8989","Meow":"9090"}
 
 The way the system is set up, the drop down menu in the frontend pulls the names of the departments from the backend, and the user must enter 
